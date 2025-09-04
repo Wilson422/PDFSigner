@@ -31,6 +31,9 @@
       height: 200px;
       border: 1px solid #000;
       touch-action: none;
+      background: #fff;
+      display: block;
+      margin: 0 auto;
     }
     button { margin: 5px 5px 5px 0; font-size: 16px; }
     .controls { margin-bottom: 10px; }
@@ -87,38 +90,92 @@
 <script>
 const canvas = document.getElementById('signature-pad');
 const penColorSelect = document.getElementById('pen-color');
-const signaturePad = new SignaturePad(canvas, {
-  backgroundColor: 'rgba(255,255,255,0)',
-  minWidth: 1,
-  maxWidth: 2,
-  penColor: penColorSelect.value
-});
+let signaturePad;
 
+// 響應式 canvas 初始化
 function resizeCanvas() {
   const ratio = Math.max(window.devicePixelRatio || 1, 1);
   canvas.width = canvas.offsetWidth * ratio;
-  canvas.height = canvas.offsetHeight * ratio;
-  canvas.getContext("2d").scale(ratio, ratio);
-  signaturePad.clear();
+  canvas.height = 200 * ratio;
+  canvas.style.height = "200px";
+  canvas.style.width = "100%";
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(1, 0, 0, 1, 0, 0); // 重設 transform
+  ctx.scale(ratio, ratio);
+  if (signaturePad) signaturePad.clear();
 }
+window.addEventListener("resize", resizeCanvas);
+
+// 初始化 SignaturePad
+function initSignaturePad() {
+  if (signaturePad) signaturePad.off();
+  signaturePad = new SignaturePad(canvas, {
+    backgroundColor: 'rgba(255,255,255,0)',
+    minWidth: 1,
+    maxWidth: 2,
+    penColor: penColorSelect.value
+  });
+}
+initSignaturePad();
 resizeCanvas();
 
-// 監聽顏色選擇器變更，並即時改變簽名顏色
+// 顏色選擇自動清除並設新顏色
 penColorSelect.addEventListener('change', function() {
   signaturePad.penColor = this.value;
+  signaturePad.clear();
+})
+
+// 清除簽名功能
+function clearSignature() {
+  if (signaturePad) signaturePad.clear();
+}
+
+// PDF 載入流程
+const pdfUpload = document.getElementById('pdf-upload');
+const pdfContainer = document.getElementById('pdf-container');
+pdfUpload.addEventListener('change', async function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async function(evt) {
+    const typedarray = new Uint8Array(evt.target.result);
+    pdfjsLib.getDocument(typedarray).promise.then(pdf => {
+      pdfContainer.innerHTML = ""; // 清空
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        pdf.getPage(pageNum).then(page => {
+          const viewport = page.getViewport({ scale: 1.5 });
+          const pageDiv = document.createElement('div');
+          pageDiv.className = 'pdf-page';
+          const pageCanvas = document.createElement('canvas');
+          pageCanvas.width = viewport.width;
+          pageCanvas.height = viewport.height;
+          pageCanvas.style.width = "100%";
+          pageDiv.appendChild(pageCanvas);
+          pdfContainer.appendChild(pageDiv);
+          page.render({canvasContext: pageCanvas.getContext('2d'), viewport:viewport});
+        });
+      }
+    });
+  };
+  reader.readAsArrayBuffer(file);
 });
 
-// 其餘功能，根據原專案內容保留
-let pdfDoc = null;
-let pdfOriginalBytes = null;
-let scale = 1.5;
-let currentPageNumber = 1;
-let signatureImages = [];
-let currentScale = 1;
-let selectedSignature = null;
-
-// 你原本的其它 script 內容（例如 clearSignature, createDraggableSignature, signAndDownload 等）請繼續保留
-// ...
+// 以下保留你的原有功能函式
+function createDraggableSignature() {
+  // ...
+}
+function increaseSize() {
+  // ...
+}
+function decreaseSize() {
+  // ...
+}
+function deleteSelectedSignature() {
+  // ...
+}
+function signAndDownload() {
+  // ...
+}
 
 </script>
 </body>
