@@ -47,7 +47,14 @@
 <h3>手寫簽名：</h3>
 <div>
   <label for="color-picker">簽名顏色：</label>
-  <input type="color" id="color-picker" value="#000000" />
+  <input type="color" id="color-picker" value="#000000" list="color-list" />
+  <datalist id="color-list">
+    <option value="#000000">黑色</option>
+    <option value="#ff0000">紅色</option>
+    <option value="#0000ff">藍色</option>
+    <option value="#008000">綠色</option>
+    <!-- 不要加白色 -->
+  </datalist>
 </div>
 <canvas id="signature-pad"></canvas><br />
 
@@ -65,25 +72,35 @@
 <script>
 const canvas = document.getElementById('signature-pad');
 const colorPicker = document.getElementById('color-picker');
-let signaturePad = new SignaturePad(canvas, {
-  backgroundColor: 'rgba(255,255,255,0)',
-  minWidth: 1,
-  maxWidth: 2,
-  penColor: colorPicker.value // 初始顏色
-});
+let signaturePad;
 
 function resizeCanvas() {
   const ratio = Math.max(window.devicePixelRatio || 1, 1);
-  canvas.width = canvas.offsetWidth * ratio;
-  canvas.height = canvas.offsetHeight * ratio;
+  const width = canvas.offsetWidth;
+  const height = canvas.offsetHeight;
+  canvas.width = width * ratio;
+  canvas.height = height * ratio;
   canvas.getContext("2d").scale(ratio, ratio);
-  signaturePad.clear();
+  // 重新建立 SignaturePad 以解決座標偏移
+  signaturePad = new SignaturePad(canvas, {
+    backgroundColor: 'rgba(0,0,0,0)', // 透明背景
+    minWidth: 1,
+    maxWidth: 2,
+    penColor: colorPicker.value
+  });
 }
 resizeCanvas();
+window.addEventListener("orientationchange", resizeCanvas);
+window.addEventListener("resize", resizeCanvas);
 
-// 監聽顏色變更
 colorPicker.addEventListener('input', function () {
-  signaturePad.penColor = colorPicker.value;
+  if (signaturePad) signaturePad.penColor = colorPicker.value;
+  // 禁止選白色
+  if (colorPicker.value.toLowerCase() === "#ffffff") {
+    alert("不允許選擇白色，請換其他顏色！");
+    colorPicker.value = "#000000";
+    signaturePad.penColor = "#000000";
+  }
 });
 
 let pdfDoc = null;
