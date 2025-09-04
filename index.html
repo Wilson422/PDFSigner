@@ -119,9 +119,10 @@ function initSignaturePad() {
 initSignaturePad();
 resizeCanvas();
 
-// 顏色選擇自動清除並設新顏色
+// 顏色選擇自動清除並設新顏色（並立即變色）
 penColorSelect.addEventListener('change', function() {
   signaturePad.penColor = this.value;
+  // 清除舊簽名
   signaturePad.clear();
 })
 
@@ -130,53 +131,236 @@ function clearSignature() {
   if (signaturePad) signaturePad.clear();
 }
 
-// PDF 載入流程
-const pdfUpload = document.getElementById('pdf-upload');
-const pdfContainer = document.getElementById('pdf-container');
-pdfUpload.addEventListener('change', async function(e) {
+let pdfDoc = null;
+let pdfOriginalBytes = null;
+let scale = 1.5;
+let currentPageNumber = 1;
+let signatureImages = [];
+let currentScale = 1;
+let selectedSignature = null;
+
+const pdfContainer = document.getElementById("pdf-container");
+
+document.getElementById("pdf-upload").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = async function(evt) {
-    const typedarray = new Uint8Array(evt.target.result);
-    pdfjsLib.getDocument(typedarray).promise.then(pdf => {
-      pdfContainer.innerHTML = ""; // 清空
-      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-        pdf.getPage(pageNum).then(page => {
-          const viewport = page.getViewport({ scale: 1.5 });
-          const pageDiv = document.createElement('div');
-          pageDiv.className = 'pdf-page';
-          const pageCanvas = document.createElement('canvas');
-          pageCanvas.width = viewport.width;
-          pageCanvas.height = viewport.height;
-          pageCanvas.style.width = "100%";
-          pageDiv.appendChild(pageCanvas);
-          pdfContainer.appendChild(pageDiv);
-          page.render({canvasContext: pageCanvas.getContext('2d'), viewport:viewport});
-        });
-      }
+
+  pdfOriginalBytes = await file.arrayBuffer();
+  const typedArray = new Uint8Array(pdfOriginalBytes);
+  pdfDoc = await pdfjsLib.getDocument(typedArray).promise;
+
+  pdfContainer.innerHTML = '';
+  for (let i = 1; i <= pdfDoc.numPages; i++) {
+    const page = await pdfDoc.getPage(i);
+    const viewport = page.getViewport({ scale });
+
+    const pageCanvas = document.createElement("canvas");
+    pageCanvas.width = viewport.width;
+    pageCanvas.height = viewport.height;
+    pageCanvas.style.width = "100%";
+
+    const ctx = pageCanvas.getContext("2d");
+    await page.render({ canvasContext: ctx, viewport }).promise;
+
+    const wrapper = document.createElement("div");
+    wrapper.classList.add("pdf-page");
+    wrapper.dataset.pageNumber = i;
+    wrapper.appendChild(pageCanvas);
+    pdfContainer.appendChild(wrapper);
+
+    wrapper.addEventListener("click", () => {
+      currentPageNumber = i;
+      alert("已選擇第 " + i + " 頁");
     });
-  };
-  reader.readAsArrayBuffer(file);
+  }
 });
 
-// 以下保留你的原有功能函式
-function createDraggableSignature() {
-  // ...
-}
 function increaseSize() {
-  // ...
-}
-function decreaseSize() {
-  // ...
-}
-function deleteSelectedSignature() {
-  // ...
-}
-function signAndDownload() {
-  // ...
+  currentScale *= 1.2;
+  updateImgScale();
 }
 
+function decreaseSize() {
+  currentScale /= 1.2;
+  updateImgScale();
+}
+
+function updateImgScale() {
+  signatureImages.forEach(({ imgElement }) => {
+    imgElement.style.transform = `scale(${currentScale})`;
+  });
+}
+
+function createDraggableSignature() {
+  if (signaturePad.isEmpty()) {
+    alert("請先簽名！");
+    return;
+  }
+
+  const dataURL = signaturePad.toDataURL("image/png");
+  const img = document.createElement("img");
+  img.src = dataURL;
+  img.classList.add("signature-img");
+  img.style.transform = `scale(${currentScale})`;
+
+  const wrapper = document.querySelector(`.pdf-page[data-page-number="${currentPageNumber}"]`);
+  if (!wrapper) {
+    alert("請先選擇一頁");
+    return;
+  }
+
+  wrapper.appendChild(img);
+  img.style.left = "30px";
+  img.style.top = "30px";
+
+  let offsetX = 0, offsetY = 0;
+  let startDist = null;
+
+  const dragStart = (e) => {
+    e.preventDefault();
+    const point = e.touches ? e.touches[0] : e;
+    offsetX = point.clientX - img.getBoundingClientRect().left;
+    offsetY = point.clientY - img.getBoundingClientRect().top;
+
+    document.addEventListener("mousemove", dragMove);
+    document.addEventListener("mouseup", dragEnd);
+    document.addEventListener("touchmove", dragMove, { passive: false });
+    document.addEventListener("touchend", dragEnd);
+  };
+
+  const dragMove = (e) => {
+    if (e.touches && e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (startDist) {
+        const scaleChange = dist / startDist;
+        currentScale *= scaleChange;
+        updateImgScale();
+      }
+      startDist = dist;
+      e.preventDefault();
+      return;
+    }
+
+    const point = e.touches ? e.touches[0] : e;
+    const wrapperRect = wrapper.getBoundingClientRect();
+    let x = point.clientX - wrapperRect.left - offsetX;
+    let y = point.clientY - wrapperRect.top - offsetY;
+
+    x = Math.max(0, Math.min(x, wrapperRect.width - img.offsetWidth * currentScale));
+    y = Math.max(0, Math.min(y, wrapperRect.height - img.offsetHeight * currentScale));
+
+    img.style.left = `${x}px`;
+    img.style.top = `${y}px`;
+  };
+
+  const dragEnd = () => {
+    startDist = null;
+    document.removeEventListener("mousemove", dragMove);
+    document.removeEventListener("mouseup", dragEnd);
+    document.removeEventListener("touchmove", dragMove);
+    document.removeEventListener("touchend", dragEnd);
+  };
+
+  img.addEventListener("mousedown", dragStart);
+  img.addEventListener("touchstart", dragStart, { passive: false });
+
+  // 桌面點擊
+  img.addEventListener("click", (e) => {
+    selectSignature(img);
+    e.stopPropagation();
+  });
+
+  // 手機點擊支援
+  let touchStartTime = 0;
+  let moved = false;
+
+  img.addEventListener("touchstart", (e) => {
+    touchStartTime = Date.now();
+    moved = false;
+  });
+
+  img.addEventListener("touchmove", () => {
+    moved = true;
+  });
+
+  img.addEventListener("touchend", () => {
+    const touchDuration = Date.now() - touchStartTime;
+    if (!moved && touchDuration < 300) {
+      selectSignature(img);
+    }
+  });
+
+  function selectSignature(img) {
+    document.querySelectorAll(".signature-img").forEach(el => el.classList.remove("selected"));
+    img.classList.add("selected");
+    selectedSignature = img;
+  }
+
+  signatureImages.push({
+    page: currentPageNumber,
+    imgElement: img,
+    dataURL: dataURL
+  });
+}
+
+function deleteSelectedSignature() {
+  if (selectedSignature) {
+    selectedSignature.remove();
+    signatureImages = signatureImages.filter(sig => sig.imgElement !== selectedSignature);
+    selectedSignature = null;
+  } else {
+    alert("請先點選要刪除的簽名！");
+  }
+}
+
+async function signAndDownload() {
+  if (!pdfDoc || signatureImages.length === 0) {
+    alert("請上傳 PDF 並加入簽名！");
+    return;
+  }
+
+  const pdfLibDoc = await PDFLib.PDFDocument.load(pdfOriginalBytes);
+  const pages = pdfLibDoc.getPages();
+
+  for (const sig of signatureImages) {
+    const pageIndex = sig.page - 1;
+    const page = pages[pageIndex];
+    const { width: pdfPageWidth, height: pdfPageHeight } = page.getSize();
+
+    const wrapper = document.querySelector(`.pdf-page[data-page-number="${sig.page}"]`);
+    const canvas = wrapper.querySelector("canvas");
+    const canvasRect = canvas.getBoundingClientRect();
+    const imgRect = sig.imgElement.getBoundingClientRect();
+
+    const pngImage = await pdfLibDoc.embedPng(sig.dataURL);
+    const pxToPt = pdfPageWidth / canvasRect.width;
+
+    const displayWidth = sig.imgElement.offsetWidth * currentScale;
+    const displayHeight = sig.imgElement.offsetHeight * currentScale;
+    const pdfWidth = displayWidth * pxToPt;
+    const pdfHeight = displayHeight * pxToPt;
+
+    const x = (imgRect.left - canvasRect.left) * pxToPt;
+    const y = pdfPageHeight - (imgRect.top - canvasRect.top) * pxToPt - pdfHeight;
+
+    page.drawImage(pngImage, {
+      x,
+      y,
+      width: pdfWidth,
+      height: pdfHeight,
+    });
+  }
+
+  const pdfBytes = await pdfLibDoc.save();
+  const blob = new Blob([pdfBytes], { type: "application/pdf" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "signed.pdf";
+  link.click();
+}
 </script>
 </body>
 </html>
