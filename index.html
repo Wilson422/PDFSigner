@@ -31,26 +31,10 @@
       height: 200px;
       border: 1px solid #000;
       touch-action: none;
-      background: #fff;
-      display: block;
-      margin: 0 auto;
     }
     button { margin: 5px 5px 5px 0; font-size: 16px; }
     .controls { margin-bottom: 10px; }
-    .color-picker-container {
-      margin: 10px 0;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .color-label {
-      font-size: 16px;
-      font-weight: 500;
-    }
-    select#pen-color {
-      font-size: 16px;
-      padding: 2px 8px;
-    }
+    #color-picker { margin-right: 10px; }
   </style>
 </head>
 <body>
@@ -61,18 +45,9 @@
 <div id="pdf-container"></div>
 
 <h3>手寫簽名：</h3>
-<div class="color-picker-container">
-  <span class="color-label">簽名顏色：</span>
-  <select id="pen-color">
-    <option value="black">黑色</option>
-    <option value="blue">藍色</option>
-    <option value="red">紅色</option>
-    <option value="green">綠色</option>
-    <option value="#8B4513">咖啡色</option>
-    <option value="#800080">紫色</option>
-    <option value="#FFA500">橘色</option>
-    <option value="#FFD700">黃色</option>
-  </select>
+<div>
+  <label for="color-picker">簽名顏色：</label>
+  <input type="color" id="color-picker" value="#000000" />
 </div>
 <canvas id="signature-pad"></canvas><br />
 
@@ -89,47 +64,27 @@
 
 <script>
 const canvas = document.getElementById('signature-pad');
-const penColorSelect = document.getElementById('pen-color');
-let signaturePad;
+const colorPicker = document.getElementById('color-picker');
+let signaturePad = new SignaturePad(canvas, {
+  backgroundColor: 'rgba(255,255,255,0)',
+  minWidth: 1,
+  maxWidth: 2,
+  penColor: colorPicker.value // 初始顏色
+});
 
-// 響應式 canvas 初始化
 function resizeCanvas() {
   const ratio = Math.max(window.devicePixelRatio || 1, 1);
   canvas.width = canvas.offsetWidth * ratio;
-  canvas.height = 200 * ratio;
-  canvas.style.height = "200px";
-  canvas.style.width = "100%";
-  const ctx = canvas.getContext("2d");
-  ctx.setTransform(1, 0, 0, 1, 0, 0); // 重設 transform
-  ctx.scale(ratio, ratio);
-  if (signaturePad) signaturePad.clear();
+  canvas.height = canvas.offsetHeight * ratio;
+  canvas.getContext("2d").scale(ratio, ratio);
+  signaturePad.clear();
 }
-window.addEventListener("resize", resizeCanvas);
-
-// 初始化 SignaturePad
-function initSignaturePad() {
-  if (signaturePad) signaturePad.off();
-  signaturePad = new SignaturePad(canvas, {
-    backgroundColor: 'rgba(255,255,255,0)',
-    minWidth: 1,
-    maxWidth: 2,
-    penColor: penColorSelect.value
-  });
-}
-initSignaturePad();
 resizeCanvas();
 
-// 顏色選擇自動清除並設新顏色（並立即變色）
-penColorSelect.addEventListener('change', function() {
-  signaturePad.penColor = this.value;
-  // 清除舊簽名
-  signaturePad.clear();
-})
-
-// 清除簽名功能
-function clearSignature() {
-  if (signaturePad) signaturePad.clear();
-}
+// 監聽顏色變更
+colorPicker.addEventListener('input', function () {
+  signaturePad.penColor = colorPicker.value;
+});
 
 let pdfDoc = null;
 let pdfOriginalBytes = null;
@@ -154,18 +109,17 @@ document.getElementById("pdf-upload").addEventListener("change", async (e) => {
     const page = await pdfDoc.getPage(i);
     const viewport = page.getViewport({ scale });
 
-    const pageCanvas = document.createElement("canvas");
-    pageCanvas.width = viewport.width;
-    pageCanvas.height = viewport.height;
-    pageCanvas.style.width = "100%";
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
 
-    const ctx = pageCanvas.getContext("2d");
+    const ctx = canvas.getContext("2d");
     await page.render({ canvasContext: ctx, viewport }).promise;
 
     const wrapper = document.createElement("div");
     wrapper.classList.add("pdf-page");
     wrapper.dataset.pageNumber = i;
-    wrapper.appendChild(pageCanvas);
+    wrapper.appendChild(canvas);
     pdfContainer.appendChild(wrapper);
 
     wrapper.addEventListener("click", () => {
@@ -174,6 +128,10 @@ document.getElementById("pdf-upload").addEventListener("change", async (e) => {
     });
   }
 });
+
+function clearSignature() {
+  signaturePad.clear();
+}
 
 function increaseSize() {
   currentScale *= 1.2;
