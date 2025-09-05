@@ -107,10 +107,9 @@ resizeCanvas();
 window.addEventListener("orientationchange", resizeCanvas);
 window.addEventListener("resize", resizeCanvas);
 
-// 修正 BUG: 換顏色時先清空畫布
+// 換顏色時，只設定新顏色，不清空畫布
 colorPicker.addEventListener('input', function () {
   if (signaturePad) {
-    signaturePad.clear(); // 先清空畫布與筆跡資料
     signaturePad.penColor = colorPicker.value;
   }
   // 禁止選白色
@@ -144,7 +143,6 @@ document.getElementById("pdf-upload").addEventListener("change", async (e) => {
   imageInfo = null;
 
   if (fileType === "application/pdf") {
-    // PDF 處理邏輯
     pdfOriginalBytes = await file.arrayBuffer();
     const typedArray = new Uint8Array(pdfOriginalBytes);
     pdfDoc = await pdfjsLib.getDocument(typedArray).promise;
@@ -172,7 +170,6 @@ document.getElementById("pdf-upload").addEventListener("change", async (e) => {
     }
     isImageMode = false;
   } else if (fileType.startsWith("image/")) {
-    // 圖檔處理邏輯
     const imgURL = URL.createObjectURL(file);
     const img = new Image();
     img.src = imgURL;
@@ -190,7 +187,7 @@ document.getElementById("pdf-upload").addEventListener("change", async (e) => {
       pdfContainer.appendChild(wrapper);
 
       currentPageNumber = 1;
-      pdfDoc = null; // 圖檔不需 PDFDoc
+      pdfDoc = null;
       pdfOriginalBytes = null;
       isImageMode = true;
       imageInfo = {
@@ -211,6 +208,7 @@ document.getElementById("pdf-upload").addEventListener("change", async (e) => {
 
 function clearSignature() {
   signaturePad.clear();
+  // 修正：清除簽名時，重設筆跡資料，換顏色才不會有交錯
 }
 
 function increaseSize() {
@@ -343,8 +341,7 @@ function createDraggableSignature() {
     dataURL: dataURL
   });
 
-  // 修正顏色交錯BUG: 拖曳簽名後強制清空畫布與paths
-  signaturePad.clear();
+  // 不清空畫布！可複製多次
 }
 
 function deleteSelectedSignature() {
@@ -359,7 +356,6 @@ function deleteSelectedSignature() {
 
 async function signAndDownload() {
   if (pdfDoc) {
-    // PDF 檔案原本邏輯
     if (signatureImages.length === 0) {
       alert("請上傳 PDF 並加入簽名！");
       return;
@@ -403,7 +399,6 @@ async function signAndDownload() {
     link.download = "signed.pdf";
     link.click();
   } else if (isImageMode) {
-    // 圖檔簽名合成 PDF
     const wrapper = document.querySelector('.pdf-page[data-page-number="1"]');
     if (!wrapper) {
       alert("找不到圖檔頁面！");
@@ -411,7 +406,6 @@ async function signAndDownload() {
     }
     const baseCanvas = wrapper.querySelector("canvas");
 
-    // 疊上簽名
     signatureImages
       .filter(sig => sig.page === 1)
       .forEach(sig => {
@@ -431,10 +425,8 @@ async function signAndDownload() {
         baseCanvas.getContext('2d').drawImage(tempImg, x, y, w, h);
       });
 
-    // 將合成後的 canvas 轉出 PNG
     const mergedDataURL = baseCanvas.toDataURL("image/png");
 
-    // 用 PDF-Lib 建立 PDF
     const pdfDocNew = await PDFLib.PDFDocument.create();
     const pngImage = await pdfDocNew.embedPng(mergedDataURL);
     const page = pdfDocNew.addPage([baseCanvas.width, baseCanvas.height]);
@@ -443,7 +435,6 @@ async function signAndDownload() {
       width: baseCanvas.width, height: baseCanvas.height
     });
 
-    // 下載 PDF
     const pdfBytes = await pdfDocNew.save();
     const blob = new Blob([pdfBytes], { type: "application/pdf" });
     const link = document.createElement("a");
@@ -455,34 +446,29 @@ async function signAndDownload() {
   }
 }
 
-// 優化：每一頁有簽名都下載 JPG
 async function signAndDownloadJPGAll() {
   if (pdfDoc) {
     if (signatureImages.length === 0) {
       alert("請上傳 PDF 並加入簽名！");
       return;
     }
-    // 依頁號分組簽名
     const sigByPage = {};
     signatureImages.forEach(sig => {
       if (!sigByPage[sig.page]) sigByPage[sig.page] = [];
       sigByPage[sig.page].push(sig);
     });
 
-    // 依照有簽名的頁面逐頁下載 JPG
     for (const pageNumStr of Object.keys(sigByPage)) {
       const pageNum = Number(pageNumStr);
       const wrapper = document.querySelector(`.pdf-page[data-page-number="${pageNum}"]`);
       const baseCanvas = wrapper.querySelector("canvas");
 
-      // 複製 canvas 作為底圖
       const outCanvas = document.createElement('canvas');
       outCanvas.width = baseCanvas.width;
       outCanvas.height = baseCanvas.height;
       const ctx = outCanvas.getContext('2d');
       ctx.drawImage(baseCanvas, 0, 0);
 
-      // 疊上所有該頁簽名
       sigByPage[pageNum].forEach(sig => {
         const img = sig.imgElement;
         const baseRect = baseCanvas.getBoundingClientRect();
@@ -500,7 +486,6 @@ async function signAndDownloadJPGAll() {
         ctx.drawImage(tempImg, x, y, w, h);
       });
 
-      // 下載該頁 JPG
       await new Promise(resolve => {
         outCanvas.toBlob(function(blob) {
           const link = document.createElement("a");
@@ -512,7 +497,6 @@ async function signAndDownloadJPGAll() {
       });
     }
   } else if (isImageMode) {
-    // 只處理第1頁
     if (signatureImages.length === 0) {
       alert("請上傳圖檔並加入簽名！");
       return;
@@ -520,7 +504,6 @@ async function signAndDownloadJPGAll() {
     const wrapper = document.querySelector('.pdf-page[data-page-number="1"]');
     const baseCanvas = wrapper.querySelector("canvas");
 
-    // 疊上簽名
     signatureImages
       .filter(sig => sig.page === 1)
       .forEach(sig => {
@@ -540,7 +523,6 @@ async function signAndDownloadJPGAll() {
         baseCanvas.getContext('2d').drawImage(tempImg, x, y, w, h);
       });
 
-    // 下載 JPG
     baseCanvas.toBlob(function(blob) {
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
