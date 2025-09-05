@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PDF 簽名系統（完整版）</title>
+  <title>PDF 簽名系統</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.6/dist/signature_pad.umd.min.js"></script>
   <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
@@ -39,7 +39,7 @@
 </head>
 <body>
 
-<h2>PDF 簽名系統（完整版）</h2>
+<h2>PDF 簽名系統</h2>
 
 <input type="file" id="pdf-upload" accept="application/pdf,image/*" /><br /><br />
 <div id="pdf-container"></div>
@@ -80,19 +80,28 @@ let isImageMode = false;
 let imageInfo = null;
 
 function resizeCanvas() {
+  // 儲存原簽名內容
+  let data = signaturePad ? signaturePad.toData() : null;
+
   const ratio = Math.max(window.devicePixelRatio || 1, 1);
   const width = canvas.offsetWidth;
   const height = canvas.offsetHeight;
   canvas.width = width * ratio;
   canvas.height = height * ratio;
   canvas.getContext("2d").scale(ratio, ratio);
-  // 重新建立 SignaturePad 以解決座標偏移
+
+  // 重建 signaturePad
   signaturePad = new SignaturePad(canvas, {
-    backgroundColor: 'rgba(0,0,0,0)', // 透明背景
+    backgroundColor: 'rgba(0,0,0,0)',
     minWidth: 1,
     maxWidth: 2,
     penColor: colorPicker.value
   });
+
+  // 還原簽名內容
+  if (data && data.length > 0) {
+    signaturePad.fromData(data);
+  }
 }
 resizeCanvas();
 window.addEventListener("orientationchange", resizeCanvas);
