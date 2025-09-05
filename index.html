@@ -35,9 +35,23 @@
     button { margin: 5px 5px 5px 0; font-size: 16px; }
     .controls { margin-bottom: 10px; }
     #color-picker { margin-right: 10px; }
+    #line-alert {
+      display: none;
+      background: #fffbe6;
+      border: 2px solid #ffd700;
+      color: #d48806;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+      font-size: 18px;
+      text-align: center;
+      z-index: 9999;
+    }
   </style>
 </head>
 <body>
+
+<div id="line-alert"></div>
 
 <h2>PDF 簽名系統</h2>
 
@@ -71,6 +85,16 @@
 <button onclick="signAndDownloadJPGAll()">簽名頁下載 JPG</button>
 
 <script>
+// LINE瀏覽器偵測並提醒
+(function checkLineBrowser(){
+  var ua = navigator.userAgent.toLowerCase();
+  if (ua.indexOf("line") !== -1) {
+    var lineAlert = document.getElementById('line-alert');
+    lineAlert.innerHTML = "偵測到您正在LINE內建瀏覽器開啟<br><b>請用預設瀏覽器（如Chrome/Safari）開啟本網頁，以獲得完整功能！</b>";
+    lineAlert.style.display = "block";
+  }
+})();
+
 const canvas = document.getElementById('signature-pad');
 const colorPicker = document.getElementById('color-picker');
 let signaturePad;
@@ -80,9 +104,7 @@ let isImageMode = false;
 let imageInfo = null;
 
 function resizeCanvas() {
-  // 儲存原簽名內容
   let data = signaturePad ? signaturePad.toData() : null;
-
   const ratio = Math.max(window.devicePixelRatio || 1, 1);
   const width = canvas.offsetWidth;
   const height = canvas.offsetHeight;
@@ -90,7 +112,6 @@ function resizeCanvas() {
   canvas.height = height * ratio;
   canvas.getContext("2d").scale(ratio, ratio);
 
-  // 重建 signaturePad
   signaturePad = new SignaturePad(canvas, {
     backgroundColor: 'rgba(0,0,0,0)',
     minWidth: 1,
@@ -98,7 +119,6 @@ function resizeCanvas() {
     penColor: colorPicker.value
   });
 
-  // 還原簽名內容
   if (data && data.length > 0) {
     signaturePad.fromData(data);
   }
@@ -107,12 +127,10 @@ resizeCanvas();
 window.addEventListener("orientationchange", resizeCanvas);
 window.addEventListener("resize", resizeCanvas);
 
-// 換顏色時，只設定新顏色，不清空畫布
 colorPicker.addEventListener('input', function () {
   if (signaturePad) {
     signaturePad.penColor = colorPicker.value;
   }
-  // 禁止選白色
   if (colorPicker.value.toLowerCase() === "#ffffff") {
     alert("不允許選擇白色，請換其他顏色！");
     colorPicker.value = "#000000";
@@ -135,7 +153,6 @@ document.getElementById("pdf-upload").addEventListener("change", async (e) => {
   if (!file) return;
   const fileType = file.type;
 
-  // 清空原本畫面
   pdfContainer.innerHTML = '';
   signatureImages = [];
   currentPageNumber = 1;
@@ -208,7 +225,6 @@ document.getElementById("pdf-upload").addEventListener("change", async (e) => {
 
 function clearSignature() {
   signaturePad.clear();
-  // 修正：清除簽名時，重設筆跡資料，換顏色才不會有交錯
 }
 
 function increaseSize() {
@@ -303,13 +319,11 @@ function createDraggableSignature() {
   img.addEventListener("mousedown", dragStart);
   img.addEventListener("touchstart", dragStart, { passive: false });
 
-  // 桌面點擊
   img.addEventListener("click", (e) => {
     selectSignature(img);
     e.stopPropagation();
   });
 
-  // 手機點擊支援
   let touchStartTime = 0;
   let moved = false;
 
@@ -340,8 +354,6 @@ function createDraggableSignature() {
     imgElement: img,
     dataURL: dataURL
   });
-
-  // 不清空畫布！可複製多次
 }
 
 function deleteSelectedSignature() {
