@@ -107,8 +107,12 @@ resizeCanvas();
 window.addEventListener("orientationchange", resizeCanvas);
 window.addEventListener("resize", resizeCanvas);
 
+// 修正 BUG: 換顏色時先清空畫布
 colorPicker.addEventListener('input', function () {
-  if (signaturePad) signaturePad.penColor = colorPicker.value;
+  if (signaturePad) {
+    signaturePad.clear(); // 先清空畫布與筆跡資料
+    signaturePad.penColor = colorPicker.value;
+  }
   // 禁止選白色
   if (colorPicker.value.toLowerCase() === "#ffffff") {
     alert("不允許選擇白色，請換其他顏色！");
@@ -338,6 +342,9 @@ function createDraggableSignature() {
     imgElement: img,
     dataURL: dataURL
   });
+
+  // 修正顏色交錯BUG: 拖曳簽名後強制清空畫布與paths
+  signaturePad.clear();
 }
 
 function deleteSelectedSignature() {
