@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <title>QR Code 產生器（Canvas + Logo）</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      background-color: #f9f9f9;
+    }
+    input {
+      width: 300px;
+      padding: 8px;
+      font-size: 16px;
+    }
+    button {
+      padding: 8px 16px;
+      font-size: 16px;
+      margin-left: 8px;
+      cursor: pointer;
+    }
+    canvas {
+      margin-top: 30px;
+      border: 1px solid #ccc;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>QR Code 產生器（KF Logo）</h2>
+
+  <input type="text" id="text" placeholder="請輸入文字或連結" />
+  <button onclick="generateQRCode()">產生 QR Code</button>
+
+  <canvas id="qrcode-canvas" width="200" height="200"></canvas>
+
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <script>
+    const canvas = document.getElementById('qrcode-canvas');
+    const ctx = canvas.getContext('2d');
+
+    function generateQRCode() {
+      const text = document.getElementById('text').value.trim();
+      if (!text) {
+        alert('請輸入文字或網址！');
+        return;
+      }
+
+      // 清空畫布
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      QRCode.toDataURL(text, {
+        errorCorrectionLevel: 'H',
+        width: 200,
+        margin: 1,
+        color: {
+          dark: '#000000',
+          light: '#ffffff',
+        },
+      }, function (err, url) {
+        if (err) {
+          alert('QR Code 產生失敗：' + err);
+          return;
+        }
+
+        const qrImg = new Image();
+        qrImg.src = url;
+        qrImg.onload = () => {
+          ctx.drawImage(qrImg, 0, 0, canvas.width, canvas.height);
+
+          const logoImg = new Image();
+          logoImg.src = 'logo.png';
+
+          logoImg.onload = () => {
+            const logoSize = 50;
+            const x = (canvas.width - logoSize) / 2;
+            const y = (canvas.height - logoSize) / 2;
+
+            const radius = 10;
+            ctx.fillStyle = 'white';
+            roundRect(ctx, x - 4, y - 4, logoSize + 8, logoSize + 8, radius, true, false);
+
+            ctx.drawImage(logoImg, x, y, logoSize, logoSize);
+          };
+
+          logoImg.onerror = () => {
+            alert('載入 logo.png 失敗，請確認檔案位置與名稱是否正確');
+          };
+        };
+
+        qrImg.onerror = () => {
+          alert('載入 QR Code 影像失敗');
+        };
+      });
+    }
+
+    function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
+      if (typeof stroke === 'undefined') {
+        stroke = true;
+      }
+      if (typeof radius === 'undefined') {
+        radius = 5;
+      }
+      if (typeof radius === 'number') {
+        radius = {tl: radius, tr: radius, br: radius, bl: radius};
+      } else {
+        var defaultRadius = {tl: 0, tr: 0, br: 0, bl: 0};
+        for (var side in defaultRadius) {
+          radius[side] = radius[side] || defaultRadius[side];
+        }
+      }
+      ctx.beginPath();
+      ctx.moveTo(x + radius.tl, y);
+      ctx.lineTo(x + width - radius.tr, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius.tr);
+      ctx.lineTo(x + width, y + height - radius.br);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius.br, y + height);
+      ctx.lineTo(x + radius.bl, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius.bl);
+      ctx.lineTo(x, y + radius.tl);
+      ctx.quadraticCurveTo(x, y, x + radius.tl, y);
+      ctx.closePath();
+      if (fill) {
+        ctx.fill();
+      }
+      if (stroke) {
+        ctx.stroke();
+      }
+    }
+  </script>
+
+</body>
+</html>
