@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <title>高鐵購票證明：多份上半部合併A4 PDF</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f4f4; padding: 2em; }
+    .container { background: #fff; padding: 2em; border-radius: 8px; max-width: 460px; margin: auto; }
+    h1 { text-align: center; font-size: 1.2rem; }
+    input[type="file"] { margin-bottom: 1em; width: 100%; }
+    button { padding: 0.6em 1.2em; font-size: 1rem; width: 100%; }
+    #status { color: #0a0; margin-top: 1em; text-align: center; min-height: 1.2em; }
+    #error { color: #d00; margin-top: 0.5em; text-align: center; min-height: 1.2em; }
+    #drop-area {
+      border: 2px dashed #aaa; border-radius: 8px; padding: 1.2em; text-align: center;
+      color: #666; margin-bottom: 1em; background: #fafafa; transition: border-color .3s;
+    }
+    #drop-area.dragover { border-color: #1976d2; background: #e3f2fd; color: #1976d2; }
+    #file-list { margin: 0 0 1em 0; padding: 0; list-style: none; }
+    #file-list li {
+      background: #f2f2f2; border-radius: 5px; margin-bottom: 6px; padding: 8px 12px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .remove-btn {
+      background: #d32f2f; color: #fff; border: none; border-radius: 3px;
+      padding: 2px 7px; cursor: pointer; font-size: 0.9em; margin-left: 10px;
+    }
+    .hint { font-size: 0.93em; color: #555; margin: 0.5em 0 1em; text-align: center; }
+  </style>
+
+  <!-- 建議：用你已測試可用的 CDN（如 jsDelivr） -->
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib/dist/pdf-lib.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1>高鐵購票證明多份上半合併（A4自動分頁）</h1>
+    <div class="hint">選擇多個高鐵 PDF，各自的上半部會依順序合併成 A4，2份一頁，自動分頁。</div>
+    <div id="drop-area">拖曳購票證明 PDF 到這裡，或下方選檔</div>
+    <input type="file" id="pdf-files" accept="application/pdf" multiple />
+    <ul id="file-list"></ul>
+    <button id="merge-btn">合併並下載 PDF</button>
+    <div id="status"></div>
+    <div id="error"></div>
+  </div>
+
+  <script>
+    // mm -> pt
+    const mmToPt = (mm) => mm * 2.83465;
+    const A4_W = mmToPt(210);   // 595.28
+    const A4_H = mmToPt(297);   // 841.89
+    const HALF_H = A4_H / 2;
+
+    const fileInput = document.getElementById('pdf-files');
+    const dropArea = document.getElementById('drop-area');
+    const mergeBtn = document.getElementById('merge-btn');
+    const statusDiv = document.getElementById('status');
+    const errorDiv = document.getElementById('error');
+    const fileList = document.getElementById('file-list');
+    let filesArray = [];
+
+    function updateFileList() {
+      fileList.innerHTML = '';
+      if (filesArray.length === 0) {
+        const li = document.createElement('li');
+        li.style.background = 'none';
+        li.textContent = '尚未選擇檔案。';
+        fileList.appendChild(li);
+        return;
+      }
+      filesArray.forEach((f, i) => {
+        const li = document.createElement('li');
+        li.innerHTML = `<span>${i + 1}. ${f.file.name}</span>
+                        <button class="remove-btn">移除</button>`;
+        li.querySelector('.remove-btn').onclick = () => {
+          filesArray = filesArray.filter((_, idx) => idx !== i);
+          updateFileList();
+        };
+        fileList.appendChild(li);
+      });
+    }
+
+    function addFiles(newFiles) {
+      const existing = filesArray.map(f => f.file.name);
+      for (const f of newFiles) {
+        if (f.type === 'application/pdf' && !existing.includes(f.name)) {
+          filesArray.push({ file: f });
+        }
+      }
+      updateFileList();
+    }
+
+    fileInput.onchange = () => addFiles(Array.from(fileInput.files));
+    dropArea.addEventListener('dragover', (e) => { e.preventDefault(); dropArea.classList.add('dragover'); });
+    dropArea.addEventListener('dragleave', (e) => { e.preventDefault(); dropArea.classList.remove('dragover'); });
+    dropArea.addEventListener('drop', (e) => {
+      e.preventDefault(); dropArea.classList.remove('dragover');
+      addFiles(Array.from(e.dataTransfer.files));
+    });
+
+    // 將來源 PDF 第一頁「上半部」裁切後嵌入
+    async function embedTopHalf(targetDoc, srcPage) {
+      const w = srcPage.getWidth();
+      const h = srcPage.getHeight();
+      // 使用 embedPage 的 boundingBox 只取上半部（PDF 座標原點在左下）
+      const boundingBox = { left: 0, bottom: h / 2, right: w, top: h };
+      const embedded = await targetDoc.embedPage(srcPage, boundingBox);
+      // 某些版本不提供 embedded.width/height，可自行計算裁切尺寸
+      const clipWidth = boundingBox.right - boundingBox.left;
+      const clipHeight = boundingBox.top - boundingBox.bottom;
+      return { embedded, clipWidth, clipHeight };
+    }
+
+    mergeBtn.onclick = async () => {
+      errorDiv.textContent = '';
+      statusDiv.textContent = '';
+
+      if (filesArray.length < 1) {
+        errorDiv.textContent = '請選擇至少一個 PDF 檔案。';
+        return;
+      }
+
+      statusDiv.textContent = '合併中，請稍候...';
+
+      try {
+        // 載入所有PDF
+        const buffers = await Promise.all(filesArray.map(f => f.file.arrayBuffer()));
+        const pdfDocs = await Promise.all(buffers.map(buf => PDFLib.PDFDocument.load(buf)));
+        const out = await PDFLib.PDFDocument.create();
+
+        // 逐一合併，每頁2份（上半/下半），多餘自動分頁
+        for (let i = 0; i < pdfDocs.length; i += 2) {
+          const outPage = out.addPage([A4_W, A4_H]);
+          // 第一個
+          const pageA = pdfDocs[i].getPage(0);
+          const { embedded: topA, clipWidth: wA, clipHeight: hA } = await embedTopHalf(out, pageA);
+          const scaleA = Math.min(A4_W / wA, HALF_H / hA);
+          const scaledWA = wA * scaleA;
+          const scaledHA = hA * scaleA;
+          const xA = (A4_W - scaledWA) / 2;
+          const yA = HALF_H + (HALF_H - scaledHA) / 2;
+          outPage.drawPage(topA, { x: xA, y: yA, xScale: scaleA, yScale: scaleA });
+
+          // 第二個（如有）
+          if (i + 1 < pdfDocs.length) {
+            const pageB = pdfDocs[i + 1].getPage(0);
+            const { embedded: topB, clipWidth: wB, clipHeight: hB } = await embedTopHalf(out, pageB);
+            const scaleB = Math.min(A4_W / wB, HALF_H / hB);
+            const scaledWB = wB * scaleB;
+            const scaledHB = hB * scaleB;
+            const xB = (A4_W - scaledWB) / 2;
+            const yB = (HALF_H - scaledHB) / 2;
+            outPage.drawPage(topB, { x: xB, y: yB, xScale: scaleB, yScale: scaleB });
+          }
+        }
+
+        // 下載合併後PDF
+        const now = new Date();
+        const ts = now.toISOString().slice(0,19).replace(/[:T]/g, '-');
+        const mergedBytes = await out.save();
+        const blob = new Blob([mergedBytes], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `thsr-merged-top-halves-${ts}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 800);
+
+        statusDiv.textContent = '合併完成，已下載檔案！';
+      } catch (e) {
+        errorDiv.textContent = '合併失敗：' + e.message;
+        statusDiv.textContent = '';
+      }
+    };
+
+    updateFileList();
+  </script>
+</body>
+</html>

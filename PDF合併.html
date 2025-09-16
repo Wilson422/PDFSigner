@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>PDF 合併工具（拖曳排序）</title>
+  <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f4f4; padding: 2em; }
+    .container { background: #fff; padding: 2em; border-radius: 8px; max-width: 430px; margin: auto; }
+    h1 { text-align: center; }
+    input[type="file"] { margin-bottom: 1em; }
+    button { padding: 0.5em 1.5em; font-size: 1em; }
+    #status { color: #0a0; margin-top: 1em; text-align: center; }
+    #error { color: #d00; margin-top: 1em; text-align: center; }
+    #drop-area {
+      border: 2px dashed #aaa;
+      border-radius: 8px;
+      padding: 2em;
+      text-align: center;
+      color: #666;
+      margin-bottom: 1em;
+      background: #fafafa;
+      transition: border-color .3s;
+    }
+    #drop-area.dragover {
+      border-color: #1976d2;
+      background: #e3f2fd;
+      color: #1976d2;
+    }
+    #file-list {
+      margin-bottom: 1em;
+      font-size: 0.95em;
+      color: #444;
+      padding: 0;
+      list-style: none;
+    }
+    #file-list li {
+      background: #f2f2f2;
+      border-radius: 5px;
+      margin-bottom: 6px;
+      padding: 8px 12px;
+      cursor: grab;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    #file-list li.dragging {
+      background: #bbdefb;
+      color: #1976d2;
+    }
+    .remove-btn {
+      background: #d32f2f;
+      color: #fff;
+      border: none;
+      border-radius: 3px;
+      padding: 2px 7px;
+      cursor: pointer;
+      font-size: 0.9em;
+      margin-left: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>PDF 合併工具</h1>
+    <div id="drop-area">拖曳 PDF 檔案到這裡，或使用下方按鈕選檔</div>
+    <input type="file" id="pdf-files" accept="application/pdf" multiple>
+    <div id="list-title" style="margin-bottom:6px;">合併順序（可拖曳調整）：</div>
+    <ul id="file-list"></ul>
+    <button id="merge-btn">合併並下載 PDF</button>
+    <div id="status"></div>
+    <div id="error"></div>
+  </div>
+  <script>
+    const fileInput = document.getElementById('pdf-files');
+    const dropArea = document.getElementById('drop-area');
+    const mergeBtn = document.getElementById('merge-btn');
+    const statusDiv = document.getElementById('status');
+    const errorDiv = document.getElementById('error');
+    const fileListUl = document.getElementById('file-list');
+
+    // 儲存 {file, id} 結構，id確保唯一
+    let filesArray = [];
+
+    // 檔案顯示與排序
+    function updateFileList() {
+      fileListUl.innerHTML = '';
+      if (filesArray.length === 0) {
+        fileListUl.innerHTML = '<li style="background:none;">尚未選擇檔案。</li>';
+      } else {
+        filesArray.forEach((f, idx) => {
+          const li = document.createElement('li');
+          li.draggable = true;
+          li.dataset.id = f.id;
+          li.innerHTML = `<span>${idx+1}. ${f.file.name}</span>
+                          <button class="remove-btn" title="移除">移除</button>`;
+          li.querySelector('.remove-btn').onclick = () => {
+            filesArray = filesArray.filter(ff => ff.id !== f.id);
+            updateFileList();
+          };
+          fileListUl.appendChild(li);
+        });
+      }
+    }
+
+    // input 選檔事件
+    fileInput.onchange = (e) => {
+      addFiles(Array.from(fileInput.files));
+    };
+
+    // 拖曳區事件
+    dropArea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropArea.classList.add('dragover');
+    });
+    dropArea.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      dropArea.classList.remove('dragover');
+    });
+    dropArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropArea.classList.remove('dragover');
+      const droppedFiles = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf');
+      if (droppedFiles.length === 0) {
+        errorDiv.textContent = '只接受 PDF 檔案。';
+        return;
+      }
+      addFiles(droppedFiles);
+    });
+
+    // 新增檔案到 filesArray，有重複不加（同名）
+    function addFiles(newFiles) {
+      const existingNames = filesArray.map(f => f.file.name);
+      newFiles.forEach(f => {
+        if (!existingNames.includes(f.name)) {
+          filesArray.push({ file: f, id: Math.random().toString(36).slice(2) });
+        }
+      });
+      updateFileList();
+    }
+
+    // 拖曳排序（SortableJS）
+    Sortable.create(fileListUl, {
+      animation: 150,
+      onEnd: function (evt) {
+        // 依拖曳結果重排 filesArray
+        const newOrder = Array.from(fileListUl.children)
+          .map(li => li.dataset.id)
+          .filter(id => !!id);
+        filesArray = newOrder.map(id => filesArray.find(f => f.id === id));
+        updateFileList();
+      }
+    });
+
+    mergeBtn.onclick = async () => {
+      errorDiv.textContent = '';
+      statusDiv.textContent = '';
+      if (!filesArray || filesArray.length < 2) {
+        errorDiv.textContent = '請選擇至少兩個 PDF 檔案。';
+        return;
+      }
+
+      statusDiv.textContent = '合併中，請稍候...';
+
+      try {
+        // 讀取所有 PDF 檔案（排序後）
+        const pdfDocs = [];
+        for (let obj of filesArray) {
+          const arrayBuffer = await obj.file.arrayBuffer();
+          const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
+          pdfDocs.push(pdfDoc);
+        }
+
+        // 建立新的 PDF
+        const mergedPdf = await PDFLib.PDFDocument.create();
+
+        for (let pdfDoc of pdfDocs) {
+          const pages = await mergedPdf.copyPages(pdfDoc, pdfDoc.getPageIndices());
+          pages.forEach(page => mergedPdf.addPage(page));
+        }
+
+        const mergedBytes = await mergedPdf.save();
+        const blob = new Blob([mergedBytes], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob);
+
+        // 直接自動下載
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'merged.pdf';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 1000);
+
+        statusDiv.textContent = '合併完成，已下載檔案！';
+      } catch (e) {
+        errorDiv.textContent = '合併失敗：' + e.message;
+        statusDiv.textContent = '';
+      }
+    };
+
+    updateFileList();
+  </script>
+</body>
+</html>
