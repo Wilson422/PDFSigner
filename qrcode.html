@@ -2,134 +2,282 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>QR Code 產生器（Canvas + Logo）</title>
+  <title>QR Code 產生器（可長按/右鍵另存圖片）</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
+    :root {
+      color-scheme: light;
+    }
     body {
-      font-family: sans-serif;
-      padding: 20px;
-      background-color: #f9f9f9;
+      font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+      margin: 0;
+      padding: 16px;
+      background: #f5f5f5;
+      line-height: 1.5;
     }
-    input {
-      width: 300px;
-      padding: 8px;
+    .app {
+      max-width: 520px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 20px 22px 28px;
+      border-radius: 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    }
+    h1 {
+      font-size: 20px;
+      margin: 0 0 14px;
+      text-align: center;
+    }
+    .field {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .field input {
+      flex: 1;
       font-size: 16px;
-    }
-    button {
-      padding: 8px 16px;
-      font-size: 16px;
-      margin-left: 8px;
-      cursor: pointer;
-    }
-    canvas {
-      margin-top: 30px;
+      padding: 10px 12px;
       border: 1px solid #ccc;
-      display: block;
+      border-radius: 8px;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .field input:focus {
+      border-color: #1976d2;
+      box-shadow: 0 0 0 3px rgba(25,118,210,.15);
+    }
+    .field button {
+      font-size: 15px;
+      padding: 0 18px;
+      border: none;
+      background: #1976d2;
+      color: #fff;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background .2s;
+      white-space: nowrap;
+    }
+    .field button:hover,
+    .field button:active {
+      background: #115293;
+    }
+
+    .qr-wrapper {
+      margin-top: 10px;
+      text-align: center;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    #qr-img {
+      display: none;
+      /* 寬度自適應：最大 360px，寬度不超過 80vw */
+      width: min(80vw, 360px);
+      height: auto;
+      background: #fff;
+      border: 1px solid #d3d3d3;
+      border-radius: 12px;
+      padding: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,.08);
+      image-rendering: crisp-edges;
+      image-rendering: -webkit-optimize-contrast;
+    }
+
+    .hint {
+      font-size: 13px;
+      color: #555;
+      margin-top: 10px;
+    }
+
+    /* 隱藏用來合成的 canvas */
+    #work-canvas {
+      position: absolute;
+      left: -9999px;
+      top: -9999px;
+      visibility: hidden;
+    }
+
+    @media (min-width: 900px) {
+      body {
+        padding: 40px 24px;
+      }
+      h1 {
+        font-size: 22px;
+      }
     }
   </style>
 </head>
 <body>
+  <div class="app">
+    <h1>QR Code 產生器（含 Logo）</h1>
 
-  <h2>QR Code 產生器（KF Logo）</h2>
+    <div class="field">
+      <input id="textInput" type="text" placeholder="輸入文字或連結" autocomplete="off" />
+      <button id="genBtn">產生</button>
+    </div>
 
-  <input type="text" id="text" placeholder="請輸入文字或連結" />
-  <button onclick="generateQRCode()">產生 QR Code</button>
+    <div class="qr-wrapper">
+      <img id="qr-img" alt="QR Code 預覽（長按或右鍵另存圖片）" draggable="false" />
+      <div id="msg" class="hint">輸入內容後按「產生」。手機可長按圖片；電腦可右鍵另存。</div>
+    </div>
 
-  <canvas id="qrcode-canvas" width="200" height="200"></canvas>
+    <canvas id="work-canvas"></canvas>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <script>
-    const canvas = document.getElementById('qrcode-canvas');
+    const inputEl = document.getElementById('textInput');
+    const btnEl = document.getElementById('genBtn');
+    const imgEl = document.getElementById('qr-img');
+    const msgEl = document.getElementById('msg');
+    const canvas = document.getElementById('work-canvas');
     const ctx = canvas.getContext('2d');
 
-    function generateQRCode() {
-      const text = document.getElementById('text').value.trim();
+    let lastText = '';
+    let regenTimer = null;
+
+    btnEl.addEventListener('click', () => {
+      generate();
+    });
+
+    inputEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter') generate();
+    });
+
+    window.addEventListener('resize', () => {
+      if (!lastText) return;
+      if (regenTimer) clearTimeout(regenTimer);
+      regenTimer = setTimeout(() => {
+        generate(true); // silent re-gen
+      }, 250);
+    });
+
+    function computeLogicalSize() {
+      const vw = Math.min(window.innerWidth, document.documentElement.clientWidth || window.innerWidth);
+      if (vw <= 480) {
+        // 手機：80vw，限制在 200~320
+        return Math.max(200, Math.min(Math.round(vw * 0.8), 320));
+      } else if (vw <= 768) {
+        return 320;
+      } else {
+        return 360;
+      }
+    }
+
+    function generate(isAuto = false) {
+      const text = inputEl.value.trim();
       if (!text) {
-        alert('請輸入文字或網址！');
+        if (!isAuto) {
+          msgEl.textContent = '請先輸入內容。';
+        }
         return;
       }
+      lastText = text;
 
-      // 清空畫布
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const logicalSize = computeLogicalSize();
+      const scale = window.devicePixelRatio || 1;
+      const pixelSize = logicalSize * scale;
+
+      canvas.width = pixelSize;
+      canvas.height = pixelSize;
+
+      // 清掉（含背景白色）
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, pixelSize, pixelSize);
+
+      msgEl.textContent = isAuto ? '重新調整尺寸中...' : '產生中...';
 
       QRCode.toDataURL(text, {
         errorCorrectionLevel: 'H',
-        width: 200,
+        width: pixelSize,
         margin: 1,
         color: {
           dark: '#000000',
-          light: '#ffffff',
-        },
-      }, function (err, url) {
+          light: '#ffffff'
+        }
+      }, (err, url) => {
         if (err) {
-          alert('QR Code 產生失敗：' + err);
+          msgEl.textContent = '產生失敗：' + err;
           return;
         }
-
         const qrImg = new Image();
         qrImg.src = url;
         qrImg.onload = () => {
-          ctx.drawImage(qrImg, 0, 0, canvas.width, canvas.height);
-
-          const logoImg = new Image();
-          logoImg.src = 'logo.png';
-
-          logoImg.onload = () => {
-            const logoSize = 50;
-            const x = (canvas.width - logoSize) / 2;
-            const y = (canvas.height - logoSize) / 2;
-
-            const radius = 10;
-            ctx.fillStyle = 'white';
-            roundRect(ctx, x - 4, y - 4, logoSize + 8, logoSize + 8, radius, true, false);
-
-            ctx.drawImage(logoImg, x, y, logoSize, logoSize);
-          };
-
-          logoImg.onerror = () => {
-            alert('載入 logo.png 失敗，請確認檔案位置與名稱是否正確');
-          };
+          ctx.drawImage(qrImg, 0, 0, pixelSize, pixelSize);
+          drawLogoAndExport(logicalSize, scale);
         };
-
         qrImg.onerror = () => {
-          alert('載入 QR Code 影像失敗');
+          msgEl.textContent = 'QR 圖片載入失敗。';
         };
       });
     }
 
-    function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
-      if (typeof stroke === 'undefined') {
-        stroke = true;
-      }
-      if (typeof radius === 'undefined') {
-        radius = 5;
-      }
-      if (typeof radius === 'number') {
-        radius = {tl: radius, tr: radius, br: radius, bl: radius};
-      } else {
-        var defaultRadius = {tl: 0, tr: 0, br: 0, bl: 0};
-        for (var side in defaultRadius) {
-          radius[side] = radius[side] || defaultRadius[side];
+    function drawLogoAndExport(logicalSize, scale) {
+      const logo = new Image();
+      logo.src = 'logo.png';
+      let logoDrawn = false;
+
+      logo.onload = () => {
+        const pixelSize = logicalSize * scale;
+        const logoLogical = Math.round(logicalSize * 0.25); // 約 25% 寬
+        const logoSize = logoLogical * scale;
+        const x = (pixelSize - logoSize) / 2;
+        const y = (pixelSize - logoSize) / 2;
+
+        // 白底圓角框
+        const padding = 8 * scale;
+        const radius = 14 * scale;
+        roundRect(ctx, x - padding, y - padding, logoSize + padding * 2, logoSize + padding * 2, radius, '#ffffff');
+
+        ctx.drawImage(logo, x, y, logoSize, logoSize);
+        logoDrawn = true;
+        finalizeExport(logicalSize);
+      };
+
+      logo.onerror = () => {
+        // 沒有 logo 仍然導出
+        console.warn('logo.png 載入失敗，將輸出無 Logo 版本');
+        finalizeExport(logicalSize);
+      };
+
+      // 防止 logo 一直卡住（例如網路很慢）
+      setTimeout(() => {
+        if (!logoDrawn) {
+            // 如果超時還沒畫，就直接輸出（無 logo）
+            finalizeExport(logicalSize);
         }
-      }
-      ctx.beginPath();
-      ctx.moveTo(x + radius.tl, y);
-      ctx.lineTo(x + width - radius.tr, y);
-      ctx.quadraticCurveTo(x + width, y, x + width, y + radius.tr);
-      ctx.lineTo(x + width, y + height - radius.br);
-      ctx.quadraticCurveTo(x + width, y + height, x + width - radius.br, y + height);
-      ctx.lineTo(x + radius.bl, y + height);
-      ctx.quadraticCurveTo(x, y + height, x, y + height - radius.bl);
-      ctx.lineTo(x, y + radius.tl);
-      ctx.quadraticCurveTo(x, y, x + radius.tl, y);
-      ctx.closePath();
-      if (fill) {
-        ctx.fill();
-      }
-      if (stroke) {
-        ctx.stroke();
+      }, 4000);
+    }
+
+    function finalizeExport(logicalSize) {
+      try {
+        const dataURL = canvas.toDataURL('image/png');
+        imgEl.src = dataURL;
+        imgEl.style.display = 'inline-block';
+        imgEl.style.width = logicalSize + 'px'; // 確保與計算一致
+        msgEl.textContent = '長按 (手機) 或右鍵 (電腦) 可另存圖片。';
+      } catch (e) {
+        msgEl.textContent = '輸出失敗（可能跨域）：' + e;
       }
     }
-  </script>
 
+    function roundRect(ctx, x, y, w, h, r, fillStyle = '#fff') {
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+      ctx.fillStyle = fillStyle;
+      ctx.fill();
+      ctx.restore();
+    }
+  </script>
 </body>
 </html>
