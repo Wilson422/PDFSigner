@@ -2,199 +2,311 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>QR Code 產生器（可長按/右鍵另存圖片）</title>
+  <title>QR Code 產生器（匯入 / 相機掃描 / 加 Logo）</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    :root {
-      color-scheme: light;
-    }
+    :root { color-scheme: light; }
     body {
-      font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
-      margin: 0;
-      padding: 16px;
-      background: #f5f5f5;
-      line-height: 1.5;
+      font-family: system-ui,-apple-system,"Segoe UI",Arial,sans-serif;
+      margin:0; padding:16px; background:#f5f5f5; line-height:1.5;
     }
     .app {
-      max-width: 520px;
-      margin: 0 auto;
-      background: #fff;
-      padding: 20px 22px 28px;
-      border-radius: 14px;
-      box-shadow: 0 2px 8px rgba(0,0,0,.06);
+      max-width:560px; margin:0 auto; background:#fff;
+      padding:20px 22px 30px; border-radius:14px;
+      box-shadow:0 2px 8px rgba(0,0,0,.06);
     }
-    h1 {
-      font-size: 20px;
-      margin: 0 0 14px;
-      text-align: center;
-    }
-    .field {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 14px;
+    h1 { font-size:20px; margin:0 0 14px; text-align:center; }
+    .field, .import-row, .camera-row {
+      display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;
     }
     .field input {
-      flex: 1;
-      font-size: 16px;
-      padding: 10px 12px;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      outline: none;
-      transition: border-color .2s, box-shadow .2s;
+      flex:1; font-size:16px; padding:10px 12px;
+      border:1px solid #ccc; border-radius:8px; outline:none;
+      transition:border-color .2s, box-shadow .2s;
     }
     .field input:focus {
-      border-color: #1976d2;
-      box-shadow: 0 0 0 3px rgba(25,118,210,.15);
+      border-color:#1976d2; box-shadow:0 0 0 3px rgba(25,118,210,.15);
     }
-    .field button {
-      font-size: 15px;
-      padding: 0 18px;
-      border: none;
-      background: #1976d2;
-      color: #fff;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: background .2s;
-      white-space: nowrap;
+    button {
+      font-size:15px; padding:0 16px; min-height:42px;
+      border:none; background:#1976d2; color:#fff;
+      border-radius:8px; cursor:pointer; transition:.2s;
+      display:inline-flex; align-items:center; justify-content:center;
     }
-    .field button:hover,
-    .field button:active {
-      background: #115293;
+    button.secondary {
+      background:#616161;
     }
-
-    .qr-wrapper {
-      margin-top: 10px;
-      text-align: center;
-      user-select: none;
-      -webkit-user-select: none;
+    button:hover, button:active { filter:brightness(.92); }
+    .import-zone {
+      width:100%; padding:14px 16px; border:2px dashed #bbb;
+      border-radius:12px; text-align:center; font-size:14px;
+      background:#fafafa; color:#555; cursor:pointer;
+      transition:border-color .25s, background .25s;
+      user-select:none;
     }
-
+    .import-zone.dragover {
+      border-color:#1976d2; background:#eef7ff;
+    }
+    .qr-wrapper { margin-top:14px; text-align:center; user-select:none; }
     #qr-img {
-      display: none;
-      /* 寬度自適應：最大 360px，寬度不超過 80vw */
-      width: min(80vw, 360px);
-      height: auto;
-      background: #fff;
-      border: 1px solid #d3d3d3;
-      border-radius: 12px;
-      padding: 8px;
-      box-shadow: 0 2px 6px rgba(0,0,0,.08);
-      image-rendering: crisp-edges;
-      image-rendering: -webkit-optimize-contrast;
+      display:none; width:min(80vw,360px); height:auto;
+      background:#fff; border:1px solid #d3d3d3; border-radius:12px;
+      padding:8px; box-shadow:0 2px 6px rgba(0,0,0,.08);
+      image-rendering:crisp-edges; image-rendering:-webkit-optimize-contrast;
     }
-
-    .hint {
-      font-size: 13px;
-      color: #555;
-      margin-top: 10px;
+    .hint { font-size:13px; color:#555; margin-top:10px; min-height:18px;}
+    #work-canvas, #decode-canvas, #scan-canvas {
+      position:absolute; left:-9999px; top:-9999px; visibility:hidden;
     }
+    .small-note { font-size:12px; color:#666; margin-top:6px; }
 
-    /* 隱藏用來合成的 canvas */
-    #work-canvas {
-      position: absolute;
-      left: -9999px;
-      top: -9999px;
-      visibility: hidden;
+    /* 相機掃描覆蓋層 */
+    .camera-overlay {
+      position:fixed; inset:0; background:rgba(0,0,0,.75);
+      display:none; flex-direction:column; align-items:center; justify-content:flex-start;
+      z-index:9999; padding:20px 12px 40px;
     }
-
-    @media (min-width: 900px) {
-      body {
-        padding: 40px 24px;
-      }
-      h1 {
-        font-size: 22px;
-      }
+    .camera-overlay.active { display:flex; }
+    .camera-box {
+      position:relative; width: min(90vw, 500px);
+      aspect-ratio: 3 / 4; background:#000;
+      border-radius:16px; overflow:hidden;
+      box-shadow:0 2px 12px rgba(0,0,0,.5);
+      display:flex; align-items:center; justify-content:center;
+    }
+    video {
+      width:100%; height:100%; object-fit:cover;
+    }
+    .scan-frame {
+      position:absolute; width:70%; aspect-ratio:1;
+      border:2px solid rgba(255,255,255,0.85); border-radius:12px;
+      box-shadow:0 0 0 200vmax rgba(0,0,0,0.35);
+      pointer-events:none;
+      animation:pulse 2.4s infinite;
+    }
+    @keyframes pulse {
+      0%,100% { box-shadow:0 0 0 200vmax rgba(0,0,0,0.35); }
+      50% { box-shadow:0 0 0 200vmax rgba(0,0,0,0.55); }
+    }
+    .camera-info {
+      color:#fff; font-size:14px; text-align:center; margin:14px 0 10px;
+    }
+    .camera-actions {
+      display:flex; gap:10px; flex-wrap:wrap; justify-content:center;
+    }
+    .camera-actions button {
+      min-width:110px;
+    }
+    .decode-status {
+      font-size:13px; color:#fff; margin-top:8px; height:18px;
+      text-align:center;
+    }
+    .inline-badge {
+      display:inline-block; background:#1976d2; color:#fff;
+      font-size:11px; padding:2px 6px; border-radius:999px; margin-left:6px;
+      vertical-align:middle;
+    }
+    @media (min-width:900px) {
+      body { padding:40px 24px; }
+      h1 { font-size:22px; }
     }
   </style>
 </head>
 <body>
   <div class="app">
-    <h1>QR Code 產生器（含 Logo）</h1>
+    <h1>QR Code 產生器（掃描 / 匯入 / 加 Logo）<span class="inline-badge">v3</span></h1>
 
+    <!-- 文字生成列 -->
     <div class="field">
-      <input id="textInput" type="text" placeholder="輸入文字或連結" autocomplete="off" />
+      <input id="textInput" type="text" placeholder="輸入文字或連結，或掃描/匯入 QR" autocomplete="off" />
       <button id="genBtn">產生</button>
     </div>
 
-    <div class="qr-wrapper">
-      <img id="qr-img" alt="QR Code 預覽（長按或右鍵另存圖片）" draggable="false" />
-      <div id="msg" class="hint">輸入內容後按「產生」。手機可長按圖片；電腦可右鍵另存。</div>
+    <!-- 匯入 -->
+    <div class="import-row">
+      <div id="importZone" class="import-zone">
+        拖放 / 點擊上傳 / 貼上一張 QR 圖片<br>
+        (支援：拖曳、選檔、Ctrl+V / 右鍵貼上)
+      </div>
+      <input id="fileInput" type="file" accept="image/*" style="display:none" />
+    </div>
+    <div class="small-note">
+      解析成功後自動填入並重新生成（高容錯 + Logo）。
     </div>
 
+    <!-- 相機掃描控制列 -->
+    <div class="camera-row">
+      <button id="openCameraBtn">開啟相機掃描</button>
+      <button id="stopCameraBtn" class="secondary" disabled>停止掃描</button>
+    </div>
+    <div class="small-note">
+      需 HTTPS 或 localhost。若後鏡頭打不開，瀏覽器可能不支援或權限被拒。
+    </div>
+
+    <!-- 結果 -->
+    <div class="qr-wrapper">
+      <img id="qr-img" alt="QR Code 預覽（長按或右鍵另存圖片）" draggable="false" />
+      <div id="msg" class="hint">輸入內容後按「產生」，或匯入 / 掃描 QR。</div>
+    </div>
+
+    <!-- 工作用 canvas -->
     <canvas id="work-canvas"></canvas>
+    <canvas id="decode-canvas"></canvas>
+    <canvas id="scan-canvas"></canvas>
   </div>
 
+  <!-- 相機掃描覆蓋層 -->
+  <div id="cameraOverlay" class="camera-overlay" aria-hidden="true">
+    <div class="camera-box">
+      <video id="cameraVideo" playsinline></video>
+      <div class="scan-frame"></div>
+    </div>
+    <div class="camera-info">請將 QR Code 對準白色框中央</div>
+    <div class="camera-actions">
+      <button id="switchCameraBtn" class="secondary">切換鏡頭</button>
+      <button id="closeOverlayBtn" class="secondary">關閉</button>
+    </div>
+    <div id="decodeStatus" class="decode-status"></div>
+  </div>
+
+  <!-- 生成用 QR library -->
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <!-- 解碼用 jsQR -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
+
   <script>
+    /* ========== 元素取得 ========== */
     const inputEl = document.getElementById('textInput');
     const btnEl = document.getElementById('genBtn');
     const imgEl = document.getElementById('qr-img');
     const msgEl = document.getElementById('msg');
-    const canvas = document.getElementById('work-canvas');
-    const ctx = canvas.getContext('2d');
+    const workCanvas = document.getElementById('work-canvas');
+    const workCtx = workCanvas.getContext('2d');
+    const decodeCanvas = document.getElementById('decode-canvas');
+    const decodeCtx = decodeCanvas.getContext('2d');
+
+    const importZone = document.getElementById('importZone');
+    const fileInput = document.getElementById('fileInput');
+
+    // Camera elements
+    const cameraOverlay = document.getElementById('cameraOverlay');
+    const cameraVideo = document.getElementById('cameraVideo');
+    const scanCanvas = document.getElementById('scan-canvas');
+    const scanCtx = scanCanvas.getContext('2d');
+    const openCameraBtn = document.getElementById('openCameraBtn');
+    const stopCameraBtn = document.getElementById('stopCameraBtn');
+    const closeOverlayBtn = document.getElementById('closeOverlayBtn');
+    const switchCameraBtn = document.getElementById('switchCameraBtn');
+    const decodeStatusEl = document.getElementById('decodeStatus');
 
     let lastText = '';
     let regenTimer = null;
 
-    btnEl.addEventListener('click', () => {
-      generate();
-    });
+    // Camera state
+    let cameraStream = null;
+    let scanning = false;
+    let scanRafId = null;
+    let useBackCamera = true;
+    let lastDetectedData = null;
+    let lastDecodeTime = 0;
 
-    inputEl.addEventListener('keydown', e => {
-      if (e.key === 'Enter') generate();
-    });
+    /* ========== 基本事件綁定 ========== */
+    btnEl.addEventListener('click', () => generate());
+    inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') generate(); });
 
     window.addEventListener('resize', () => {
       if (!lastText) return;
       if (regenTimer) clearTimeout(regenTimer);
-      regenTimer = setTimeout(() => {
-        generate(true); // silent re-gen
-      }, 250);
+      regenTimer = setTimeout(() => generate(true), 280);
     });
 
+    /* ========== 匯入 (檔案 / 拖放 / 貼上) ========== */
+    importZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', e => {
+      if (e.target.files && e.target.files[0]) {
+        handleFile(e.target.files[0]);
+        fileInput.value = '';
+      }
+    });
+
+    ['dragenter','dragover'].forEach(ev =>
+      importZone.addEventListener(ev, e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        importZone.classList.add('dragover');
+      })
+    );
+    ['dragleave','drop'].forEach(ev =>
+      importZone.addEventListener(ev, e => {
+        e.preventDefault();
+        if (ev === 'drop') {
+          const file = e.dataTransfer.files && e.dataTransfer.files[0];
+          if (file) handleFile(file);
+        }
+        importZone.classList.remove('dragover');
+      })
+    );
+    window.addEventListener('paste', e => {
+      if (e.clipboardData) {
+        const items = e.clipboardData.items;
+        for (let i=0; i<items.length; i++) {
+          if (items[i].type.startsWith('image/')) {
+            const file = items[i].getAsFile();
+            if (file) {
+              handleFile(file);
+              e.preventDefault();
+              return;
+            }
+          }
+        }
+      }
+    });
+
+    /* ========== 相機掃描事件綁定 ========== */
+    openCameraBtn.addEventListener('click', startCameraScan);
+    stopCameraBtn.addEventListener('click', stopCameraScan);
+    closeOverlayBtn.addEventListener('click', () => {
+      stopCameraScan();
+      hideCameraOverlay();
+    });
+    switchCameraBtn.addEventListener('click', () => {
+      useBackCamera = !useBackCamera;
+      restartCameraStream();
+    });
+
+    /* ========== 自適應大小邏輯 ========== */
     function computeLogicalSize() {
       const vw = Math.min(window.innerWidth, document.documentElement.clientWidth || window.innerWidth);
-      if (vw <= 480) {
-        // 手機：80vw，限制在 200~320
-        return Math.max(200, Math.min(Math.round(vw * 0.8), 320));
-      } else if (vw <= 768) {
-        return 320;
-      } else {
-        return 360;
-      }
+      if (vw <= 480) return Math.max(200, Math.min(Math.round(vw * 0.8), 320));
+      if (vw <= 768) return 320;
+      return 360;
     }
 
+    /* ========== 生成帶 Logo 的 QR ========== */
     function generate(isAuto = false) {
       const text = inputEl.value.trim();
       if (!text) {
-        if (!isAuto) {
-          msgEl.textContent = '請先輸入內容。';
-        }
+        if (!isAuto) msgEl.textContent = '請先輸入內容或匯入 / 掃描 QR。';
         return;
       }
       lastText = text;
-
       const logicalSize = computeLogicalSize();
       const scale = window.devicePixelRatio || 1;
       const pixelSize = logicalSize * scale;
 
-      canvas.width = pixelSize;
-      canvas.height = pixelSize;
+      workCanvas.width = pixelSize;
+      workCanvas.height = pixelSize;
 
-      // 清掉（含背景白色）
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, pixelSize, pixelSize);
+      workCtx.fillStyle = '#ffffff';
+      workCtx.fillRect(0, 0, pixelSize, pixelSize);
 
-      msgEl.textContent = isAuto ? '重新調整尺寸中...' : '產生中...';
+      msgEl.textContent = isAuto ? '尺寸重新調整中...' : '產生中...';
 
       QRCode.toDataURL(text, {
         errorCorrectionLevel: 'H',
         width: pixelSize,
         margin: 1,
-        color: {
-          dark: '#000000',
-          light: '#ffffff'
-        }
+        color: { dark: '#000000', light: '#ffffff' }
       }, (err, url) => {
         if (err) {
           msgEl.textContent = '產生失敗：' + err;
@@ -203,7 +315,7 @@
         const qrImg = new Image();
         qrImg.src = url;
         qrImg.onload = () => {
-          ctx.drawImage(qrImg, 0, 0, pixelSize, pixelSize);
+          workCtx.drawImage(qrImg, 0, 0, pixelSize, pixelSize);
           drawLogoAndExport(logicalSize, scale);
         };
         qrImg.onerror = () => {
@@ -214,48 +326,35 @@
 
     function drawLogoAndExport(logicalSize, scale) {
       const logo = new Image();
-      logo.src = 'logo.png';
-      let logoDrawn = false;
+      logo.src = 'logo.png'; // 若跨網域：logo.crossOrigin='anonymous'
+      let done = false;
 
       logo.onload = () => {
         const pixelSize = logicalSize * scale;
-        const logoLogical = Math.round(logicalSize * 0.25); // 約 25% 寬
+        const logoLogical = Math.round(logicalSize * 0.25);
         const logoSize = logoLogical * scale;
         const x = (pixelSize - logoSize) / 2;
         const y = (pixelSize - logoSize) / 2;
-
-        // 白底圓角框
-        const padding = 8 * scale;
+        const pad = 8 * scale;
         const radius = 14 * scale;
-        roundRect(ctx, x - padding, y - padding, logoSize + padding * 2, logoSize + padding * 2, radius, '#ffffff');
-
-        ctx.drawImage(logo, x, y, logoSize, logoSize);
-        logoDrawn = true;
+        roundRect(workCtx, x - pad, y - pad, logoSize + pad * 2, logoSize + pad * 2, radius, '#ffffff');
+        workCtx.drawImage(logo, x, y, logoSize, logoSize);
+        done = true;
         finalizeExport(logicalSize);
       };
-
       logo.onerror = () => {
-        // 沒有 logo 仍然導出
-        console.warn('logo.png 載入失敗，將輸出無 Logo 版本');
         finalizeExport(logicalSize);
       };
-
-      // 防止 logo 一直卡住（例如網路很慢）
-      setTimeout(() => {
-        if (!logoDrawn) {
-            // 如果超時還沒畫，就直接輸出（無 logo）
-            finalizeExport(logicalSize);
-        }
-      }, 4000);
+      setTimeout(() => { if (!done) finalizeExport(logicalSize); }, 4000);
     }
 
     function finalizeExport(logicalSize) {
       try {
-        const dataURL = canvas.toDataURL('image/png');
+        const dataURL = workCanvas.toDataURL('image/png');
         imgEl.src = dataURL;
         imgEl.style.display = 'inline-block';
-        imgEl.style.width = logicalSize + 'px'; // 確保與計算一致
-        msgEl.textContent = '長按 (手機) 或右鍵 (電腦) 可另存圖片。';
+        imgEl.style.width = logicalSize + 'px';
+        msgEl.textContent = '長按 (手機) 或右鍵 (電腦) 另存圖片。';
       } catch (e) {
         msgEl.textContent = '輸出失敗（可能跨域）：' + e;
       }
@@ -278,6 +377,185 @@
       ctx.fill();
       ctx.restore();
     }
+
+    /* ========== 處理靜態檔案解碼 ========== */
+    function handleFile(file) {
+      if (!file.type.startsWith('image/')) {
+        msgEl.textContent = '檔案不是圖片。';
+        return;
+      }
+      msgEl.textContent = '載入圖片中...';
+
+      const reader = new FileReader();
+      reader.onload = e => {
+        const img = new Image();
+        img.onload = () => {
+          const maxSide = 800;
+          let { width, height } = img;
+          if (width > height) {
+            if (width > maxSide) {
+              height = Math.round(height * (maxSide / width));
+              width = maxSide;
+            }
+          } else {
+            if (height > maxSide) {
+              width = Math.round(width * (maxSide / height));
+              height = maxSide;
+            }
+          }
+          decodeCanvas.width = width;
+          decodeCanvas.height = height;
+            decodeCtx.drawImage(img, 0, 0, width, height);
+
+          try {
+            const imgData = decodeCtx.getImageData(0, 0, width, height);
+            const code = jsQR(imgData.data, width, height, {
+              inversionAttempts: 'attemptBoth'
+            });
+            if (code && code.data) {
+              inputEl.value = code.data;
+              msgEl.textContent = '解碼成功，正在重新生成帶 Logo 的新 QR...';
+              generate();
+            } else {
+              msgEl.textContent = '未偵測到有效 QR Code。';
+            }
+          } catch (err) {
+            msgEl.textContent = '解析失敗：' + err;
+          }
+        };
+        img.onerror = () => {
+          msgEl.textContent = '圖片載入失敗。';
+        };
+        img.src = e.target.result;
+      };
+      reader.onerror = () => {
+        msgEl.textContent = '讀取檔案失敗。';
+      };
+      reader.readAsDataURL(file);
+    }
+
+    /* ========== 相機掃描核心 ========== */
+    async function startCameraScan() {
+      if (scanning) return;
+      decodeStatusEl.textContent = '啟動相機中...';
+      showCameraOverlay();
+      stopCameraBtn.disabled = false;
+      openCameraBtn.disabled = true;
+
+      try {
+        const constraints = {
+          audio: false,
+          video: {
+            facingMode: useBackCamera ? { ideal: 'environment' } : 'user',
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        };
+        cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+        cameraVideo.srcObject = cameraStream;
+        await cameraVideo.play();
+        scanning = true;
+        decodeStatusEl.textContent = '請對準 QR Code...';
+        loopScan();
+      } catch (err) {
+        decodeStatusEl.textContent = '開啟相機失敗：' + err.message;
+        openCameraBtn.disabled = false;
+        stopCameraBtn.disabled = true;
+      }
+    }
+
+    function stopCameraScan() {
+      scanning = false;
+      if (scanRafId) cancelAnimationFrame(scanRafId);
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(t => t.stop());
+        cameraStream = null;
+      }
+      decodeStatusEl.textContent = '';
+      stopCameraBtn.disabled = true;
+      openCameraBtn.disabled = false;
+    }
+
+    function showCameraOverlay() {
+      cameraOverlay.classList.add('active');
+      cameraOverlay.setAttribute('aria-hidden', 'false');
+    }
+
+    function hideCameraOverlay() {
+      cameraOverlay.classList.remove('active');
+      cameraOverlay.setAttribute('aria-hidden', 'true');
+    }
+
+    async function restartCameraStream() {
+      stopCameraScan();
+      await startCameraScan();
+    }
+
+    function loopScan() {
+      if (!scanning) return;
+
+      const vw = cameraVideo.videoWidth;
+      const vh = cameraVideo.videoHeight;
+      if (vw === 0 || vh === 0) {
+        scanRafId = requestAnimationFrame(loopScan);
+        return;
+      }
+
+      // 將 video 畫面繪製到隱藏 canvas
+      scanCanvas.width = vw;
+      scanCanvas.height = vh;
+      scanCtx.drawImage(cameraVideo, 0, 0, vw, vh);
+
+      // 取中心正方形（改善邊緣干擾 & 效能）
+      const side = Math.min(vw, vh) * 0.7;
+      const sx = (vw - side) / 2;
+      const sy = (vh - side) / 2;
+      const imageData = scanCtx.getImageData(sx, sy, side, side);
+
+      try {
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: 'attemptBoth'
+        });
+
+        const now = performance.now();
+        if (code && code.data) {
+          if (lastDetectedData !== code.data || now - lastDecodeTime > 1500) {
+            // 防止重複快速觸發
+            lastDetectedData = code.data;
+            lastDecodeTime = now;
+            decodeStatusEl.textContent = '偵測成功，解碼中...';
+            handleDecodedFromCamera(code.data);
+            return; // 將在 handleDecodedFromCamera 中停止
+          }
+        } else {
+          // 每隔一段時間更新提示，避免閃爍
+          if (now - lastDecodeTime > 800) {
+            decodeStatusEl.textContent = '掃描中...';
+          }
+        }
+      } catch (err) {
+        decodeStatusEl.textContent = '解析錯誤：' + err.message;
+      }
+
+      scanRafId = requestAnimationFrame(() => {
+        setTimeout(loopScan, 160); // 控制掃描節奏 (~160ms)
+      });
+    }
+
+    function handleDecodedFromCamera(data) {
+      stopCameraScan();
+      hideCameraOverlay();
+      inputEl.value = data;
+      msgEl.textContent = '相機解碼成功，正在生成新 QR...';
+      generate();
+    }
+
+    /* ========== 權限/裝置檢查（可選）========== */
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      openCameraBtn.disabled = true;
+      openCameraBtn.textContent = '瀏覽器不支援相機';
+    }
+
   </script>
 </body>
 </html>
