@@ -27,6 +27,10 @@ body {
   cursor: pointer;
   z-index: 10;
 }
+#startBtn:disabled {
+  background: #555;
+  cursor: not-allowed;
+}
 #captureBtn { background: #4285f4; display: none; }
 #video, #overlay {
   position: fixed;
@@ -63,7 +67,7 @@ body {
 </style>
 </head>
 <body>
-<button id="startBtn">📸 立即拍攝</button>
+<button id="startBtn" disabled>📸 立即拍攝</button>
 <video id="video" autoplay playsinline></video>
 <canvas id="overlay"></canvas>
 <button id="captureBtn">📷 拍照</button>
@@ -81,10 +85,12 @@ let overlay = document.getElementById('overlay');
 let ctx = overlay.getContext('2d');
 let stream = null;
 let detecting = false;
-let corners = null; // 文件四角座標
+let corners = null;
 
+// OpenCV 載入完成
 cv['onRuntimeInitialized'] = () => {
   console.log("✅ OpenCV.js 已載入");
+  document.getElementById('startBtn').disabled = false;
 };
 
 document.getElementById('startBtn').onclick = async () => {
@@ -104,6 +110,8 @@ document.getElementById('startBtn').onclick = async () => {
     };
   } catch (err) {
     alert("⚠️ 無法開啟相機：" + err.message);
+    console.error(err);
+    document.getElementById('startBtn').style.display = 'block';
   }
 };
 
