@@ -78,7 +78,7 @@ body {
 </div>
 
 <!-- OpenCV.js CDN -->
-<script async src="https://docs.opencv.org/4.x/opencv.js"></script>
+<script src="https://docs.opencv.org/4.x/opencv.js" onload="onOpenCVReady()"></script>
 <script>
 let video = document.getElementById('video');
 let overlay = document.getElementById('overlay');
@@ -87,33 +87,33 @@ let stream = null;
 let detecting = false;
 let corners = null;
 
-// OpenCV 載入完成
-cv['onRuntimeInitialized'] = () => {
+function onOpenCVReady() {
   console.log("✅ OpenCV.js 已載入");
   document.getElementById('startBtn').disabled = false;
-};
 
-document.getElementById('startBtn').onclick = async () => {
-  document.getElementById('startBtn').style.display = 'none';
-  document.getElementById('video').style.display = 'block';
-  document.getElementById('overlay').style.display = 'block';
-  document.getElementById('captureBtn').style.display = 'block';
-  
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    video.srcObject = stream;
-    detecting = true;
-    video.onloadedmetadata = () => {
-      overlay.width = video.videoWidth;
-      overlay.height = video.videoHeight;
-      detectLoop();
-    };
-  } catch (err) {
-    alert("⚠️ 無法開啟相機：" + err.message);
-    console.error(err);
-    document.getElementById('startBtn').style.display = 'block';
-  }
-};
+  // 拍攝按鈕事件
+  document.getElementById('startBtn').onclick = async () => {
+    document.getElementById('startBtn').style.display = 'none';
+    document.getElementById('video').style.display = 'block';
+    document.getElementById('overlay').style.display = 'block';
+    document.getElementById('captureBtn').style.display = 'block';
+    
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      video.srcObject = stream;
+      detecting = true;
+      video.onloadedmetadata = () => {
+        overlay.width = video.videoWidth;
+        overlay.height = video.videoHeight;
+        detectLoop();
+      };
+    } catch (err) {
+      alert("⚠️ 無法開啟相機：" + err.message);
+      console.error(err);
+      document.getElementById('startBtn').style.display = 'block';
+    }
+  };
+}
 
 // 即時偵測文件邊界
 function detectLoop() {
