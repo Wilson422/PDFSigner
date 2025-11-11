@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>📄 即時文件掃描器</title>
+<style>
+body {
+  margin: 0;
+  background: #000;
+  color: #fff;
+  text-align: center;
+  font-family: sans-serif;
+  overflow: hidden;
+}
+#startBtn, #captureBtn {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #0f9d58;
+  color: white;
+  border: none;
+  padding: 15px 30px;
+  border-radius: 8px;
+  font-size: 18px;
+  cursor: pointer;
+  z-index: 10;
+}
+#captureBtn { background: #4285f4; display: none; }
+#video, #overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  object-fit: cover;
+  display: none;
+}
+#resultContainer {
+  display: none;
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  background: #000;
+}
+#resultImg {
+  width: 100%;
+  height: auto;
+  margin-top: 20px;
+}
+#backBtn {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fbbc04;
+  color: #000;
+  border: none;
+  padding: 12px 25px;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+}
+</style>
+</head>
+<body>
+<button id="startBtn">📸 立即拍攝</button>
+<video id="video" autoplay playsinline></video>
+<canvas id="overlay"></canvas>
+<button id="captureBtn">📷 拍照</button>
+
+<div id="resultContainer">
+  <img id="resultImg">
+  <button id="backBtn">返回重新拍攝</button>
+</div>
+
+<!-- OpenCV.js CDN -->
+<script async src="https://docs.opencv.org/4.x/opencv.js"></script>
+<script>
+let video = document.getElementById('video');
+let overlay = document.getElementById('overlay');
+let ctx = overlay.getContext('2d');
+let stream = null;
+let detecting = false;
+let corners = null; // 文件四角座標
+
+cv['onRuntimeInitialized'] = () => {
+  console.log("✅ OpenCV.js 已載入");
+};
+
+document.getElementById('startBtn').onclick = async () => {
+  document.getElementById('startBtn').style.display = 'none';
+  document.getElementById('video').style.display = 'block';
+  document.getElementById('overlay').style.display = 'block';
+  document.getElementById('captureBtn').style.display = 'block';
+  
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    video.srcObject = stream;
+    detecting = true;
+    video.onloadedmetadata = () => {
+      overlay.width = video.videoWidth;
+      overlay.height = video.videoHeight;
+      detectLoop();
+    };
+  } catch (err) {
+    alert("⚠️ 無法開啟相機：" + err.message);
+  }
+};
+
+// 即時偵測文件邊界
+function detectLoop() {
+  if (!detecting || !cv || !cv.Mat) {
+    requestAnimationFrame(detectLoop);
+    return;
+  }
+
+  let src = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
+  let gray = new cv.Mat();
+  let edges = new cv.Mat();
+  ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+  let frame = ctx.getImageData(0, 0, video.videoWidth, video.videoHeight);
+  src.data.set(frame.data);
+  cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+  cv.GaussianBlur(gray, gray, new cv.Size(5,5), 0);
+  cv.Canny(gray, edges, 50, 150);
+  let contours = new cv.MatVector();
+  let hierarchy = new cv.Mat();
+  cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+  let maxArea = 0, biggest = null;
+  for (let i = 0; i < contours.size(); i++) {
+    let cnt = contours.get(i);
+    let area = cv.contourArea(cnt);
+    if (area > maxArea) { biggest = cnt; maxArea = area; }
+  }
+
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = "lime";
+
+  if (biggest && maxArea > 10000) {
+    let approx = new cv.Mat();
+    cv.approxPolyDP(biggest, approx, 0.02 * cv.arcLength(biggest, true), true);
+    if (approx.rows === 4) {
+      ctx.beginPath();
+      corners = [];
+      for (let i = 0; i < 4; i++) {
+        let p = approx.intPtr(i);
+        corners.push({x:p[0], y:p[1]});
+        if (i === 0) ctx.moveTo(p[0], p[1]);
+        else ctx.lineTo(p[0], p[1]);
+      }
+      ctx.closePath();
+      ctx.stroke();
+    }
+    approx.delete();
+  }
+
+  src.delete(); gray.delete(); edges.delete(); contours.delete(); hierarchy.delete();
+  requestAnimationFrame(detectLoop);
+}
+
+// 拍照
+document.getElementById('captureBtn').onclick = () => {
+  if (!corners || corners.length !== 4) {
+    alert("⚠️ 尚未偵測到文件，請對準再拍攝");
+    return;
+  }
+
+  detecting = false;
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const cctx = canvas.getContext('2d');
+  cctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const imgData = cctx.getImageData(0, 0, canvas.width, canvas.height);
+  let src = cv.matFromImageData(imgData);
+
+  // 排序角點順序 (左上、右上、右下、左下)
+  corners.sort((a,b)=>a.y-b.y);
+  let top = corners.slice(0,2).sort((a,b)=>a.x-b.x);
+  let bottom = corners.slice(2,4).sort((a,b)=>a.x-b.x);
+  let ordered = [top[0], top[1], bottom[1], bottom[0]];
+
+  let dst = new cv.Mat();
+  let srcTri = cv.matFromArray(4,1,cv.CV_32FC2, [
+    ordered[0].x, ordered[0].y,
+    ordered[1].x, ordered[1].y,
+    ordered[2].x, ordered[2].y,
+    ordered[3].x, ordered[3].y
+  ]);
+
+  let width = 600, height = 800;
+  let dstTri = cv.matFromArray(4,1,cv.CV_32FC2, [
+    0,0, width,0, width,height, 0,height
+  ]);
+  let M = cv.getPerspectiveTransform(srcTri, dstTri);
+  cv.warpPerspective(src, dst, M, new cv.Size(width,height), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
+
+  // 顯示結果
+  const resultCanvas = document.createElement('canvas');
+  resultCanvas.width = width; resultCanvas.height = height;
+  cv.imshow(resultCanvas, dst);
+  document.getElementById('resultImg').src = resultCanvas.toDataURL();
+
+  document.getElementById('video').style.display = 'none';
+  document.getElementById('overlay').style.display = 'none';
+  document.getElementById('captureBtn').style.display = 'none';
+  document.getElementById('resultContainer').style.display = 'block';
+
+  src.delete(); dst.delete(); srcTri.delete(); dstTri.delete(); M.delete();
+};
+
+// 返回重新拍攝
+document.getElementById('backBtn').onclick = () => {
+  document.getElementById('resultContainer').style.display = 'none';
+  document.getElementById('video').style.display = 'block';
+  document.getElementById('overlay').style.display = 'block';
+  document.getElementById('captureBtn').style.display = 'block';
+  detecting = true;
+  detectLoop();
+};
+</script>
+</body>
+</html>
