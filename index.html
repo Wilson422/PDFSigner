@@ -2,489 +2,343 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PDF 簽名系統 - 賈伯斯優化版 🦞</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none" />
+  <title>PDF 簽名系統 - 賈伯斯大師創意版 🦞</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.6/dist/signature_pad.umd.min.js"></script>
-  <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
   <style>
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; background-color: #f0f2f5; color: #1c1e21; }
-    h2 { color: #007bff; border-bottom: 2px solid #007bff; padding-bottom: 10px; }
+    :root { --primary: #007bff; --success: #28a745; --danger: #dc3545; --secondary: #6c757d; }
+    body { font-family: -apple-system, system-ui, sans-serif; padding: 10px; background-color: #f8f9fa; margin: 0; color: #333; }
+    .header { background: #fff; padding: 12px 15px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; border-radius: 0 0 15px 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+    h2 { margin: 0; color: var(--primary); font-size: 1.1em; }
     
     #pdf-container { 
-      max-height: 700px; 
-      overflow-y: auto; 
-      border: 2px solid #ced4da; 
-      border-radius: 12px; 
-      background: #adb5bd; 
-      padding: 15px; 
-      margin-bottom: 20px;
-      box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+      max-height: 60vh; overflow: auto; background: #8e9aaf; padding: 20px; margin: 10px 0;
+      border-radius: 12px; display: block; text-align: center;
+      box-shadow: inset 0 2px 8px rgba(0,0,0,0.1);
     }
     
-    .pdf-page { 
-      position: relative; 
-      margin: 0 auto 25px; 
-      box-shadow: 0 8px 16px rgba(0,0,0,0.15); 
-      background: white; 
-      cursor: crosshair;
-      transition: transform 0.2s;
-    }
-    
-    canvas { width: 100%; height: auto; display: block; border-radius: 4px; }
+    .pdf-page-wrapper { position: relative; margin: 0 auto 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); background: white; display: inline-block; }
+    canvas { display: block; max-width: 100%; height: auto; }
     
     .signature-img {
-      position: absolute;
-      width: 150px; /* 預設寬度 */
-      height: auto;
-      touch-action: none;
-      cursor: move;
-      z-index: 10;
-      transform-origin: center center;
-      border: 2px solid transparent;
-      user-select: none;
-      transition: box-shadow 0.2s;
+      position: absolute; width: 150px; height: auto; touch-action: none; cursor: move; z-index: 1000;
+      transform-origin: center center; border: 2px solid transparent; user-select: none;
     }
+    .signature-img.selected { border: 2px dashed var(--primary); background: rgba(0,123,255,0.1); }
     
-    .signature-img.selected {
-      border: 2px dashed #007bff;
-      background: rgba(0, 123, 255, 0.05);
-      box-shadow: 0 0 10px rgba(0, 123, 255, 0.3);
-    }
+    .controls { background: #fff; padding: 15px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #eee; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+    .section-title { font-weight: bold; margin-bottom: 10px; color: #555; font-size: 0.9em; display: flex; align-items: center; gap: 5px; }
     
-    #signature-pad {
-      width: 100%;
-      max-width: 600px;
-      height: 250px;
-      border: 2px solid #495057;
-      border-radius: 8px;
-      touch-action: none;
-      background: white;
-      margin-bottom: 10px;
-    }
+    #signature-pad { width: 100%; height: 180px; border: 2px solid #ccc; border-radius: 8px; background: #fff; touch-action: none; }
     
-    .controls { 
-      margin: 20px 0; 
-      padding: 20px; 
-      background: white; 
-      border-radius: 12px; 
-      box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
-      border: 1px solid #dee2e6;
-    }
-
-    .btn-group { display: flex; flex-wrap: wrap; gap: 10px; }
+    .btn-group { display: flex; flex-wrap: wrap; gap: 8px; }
+    button { padding: 10px 14px; border: none; border-radius: 8px; color: white; background: var(--primary); font-weight: bold; cursor: pointer; transition: 0.2s; }
+    button:active { transform: scale(0.95); }
+    button.secondary { background: var(--secondary); }
+    button.danger { background: var(--danger); }
+    button.success { background: var(--success); }
     
-    button { 
-      padding: 10px 20px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      border: none;
-      border-radius: 6px;
-      background-color: #007bff;
-      color: white;
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
+    .tool-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+    .tool-btn { min-width: 44px; height: 44px; background: #f8f9fa; border: 1px solid #ddd; border-radius: 8px; font-size: 18px; color: #333; display: flex; align-items: center; justify-content: center; }
     
-    button:hover { background-color: #0056b3; transform: translateY(-1px); }
-    button:active { transform: translateY(0); }
-    button.secondary { background-color: #6c757d; }
-    button.secondary:hover { background-color: #5a6268; }
-    button.danger { background-color: #dc3545; }
-    button.danger:hover { background-color: #c82333; }
-    
-    #line-alert {
-      display: none;
-      background: #fff3cd;
-      border: 1px solid #ffeeba;
-      color: #856404;
-      padding: 15px;
-      margin-bottom: 20px;
-      border-radius: 8px;
-      font-weight: bold;
-      text-align: center;
-    }
-    
-    .status-bar { 
-      background: #f8f9fa; 
-      padding: 8px 15px; 
-      border-radius: 20px; 
-      font-size: 13px; 
-      color: #495057; 
-      display: inline-block;
-      margin-top: 10px;
-      border: 1px solid #dee2e6;
-    }
-    
-    label { font-weight: bold; margin-bottom: 8px; display: block; }
-    input[type="file"] { margin-bottom: 10px; }
+    #line-alert { display: none; background: #fff3cd; padding: 12px; border-radius: 8px; margin-bottom: 10px; font-size: 13px; color: #856404; border: 1px solid #ffeeba; text-align: center; }
+    .status { font-size: 12px; color: #666; }
+    .hint { font-size: 11px; color: #999; margin-top: 4px; font-style: italic; }
   </style>
 </head>
-<body onclick="handleBodyClick(event)">
+<body onclick="deselectAll(event)">
 
 <div id="line-alert"></div>
-
-<h2>PDF 簽名系統 <small style="color: #6c757d; font-size: 0.6em;">賈伯斯優化版 🦞</small></h2>
+<div class="header">
+  <h2>PDF 簽名系統 <small style="font-size: 0.6em; opacity: 0.7;">智慧視覺版 🦞</small></h2>
+  <div id="load-status" class="status">等待檔案</div>
+</div>
 
 <div class="controls">
-  <label for="pdf-upload">📁 上傳 PDF 或圖片</label>
-  <input type="file" id="pdf-upload" accept="application/pdf,image/*" />
-  <div class="status-bar" id="load-status">等待上傳中...</div>
+  <div class="section-title">📂 上傳文件 (PDF / 圖片)</div>
+  <input type="file" id="pdf-upload" accept="application/pdf,image/*" style="width: 100%;" />
 </div>
 
 <div id="pdf-container"></div>
 
 <div class="controls">
-  <h3>🖊️ 第一步：手寫簽名</h3>
-  <div style="margin-bottom: 15px;">
-    <label for="color-picker">簽名顏色：</label>
-    <div style="display: flex; align-items: center; gap: 10px;">
-      <input type="color" id="color-picker" value="#000000" list="color-list" />
-      <datalist id="color-list">
-        <option value="#000000">黑色</option>
-        <option value="#ff0000">紅色</option>
-        <option value="#0000ff">藍色</option>
-        <option value="#008000">綠色</option>
-      </datalist>
-      <span style="font-size: 12px; color: #6c757d;">(點擊左側方塊選擇顏色)</span>
+  <div class="section-title">🖊️ 第一步：手寫簽名</div>
+  <div class="tool-row" style="justify-content: space-between;">
+    <div style="display:flex; align-items:center; gap:8px;">
+      <input type="color" id="color-picker" value="#000000" style="width:40px; height:34px; border:none;" />
+      <span class="status">畫筆顏色</span>
     </div>
+    <button class="secondary" onclick="clearPad()">🧹 清除</button>
   </div>
   <canvas id="signature-pad"></canvas>
-  <div class="btn-group">
-    <button class="secondary" onclick="clearSignature()">🧹 清除畫板</button>
-    <button onclick="createDraggableSignature()">✨ 產生簽名圖片 (並拖曳至上方文件)</button>
-  </div>
+  <button style="width: 100%; margin-top: 10px;" onclick="addSignature()">✨ 產生簽名圖片</button>
 </div>
 
-<div class="controls" id="edit-controls">
-  <h3>📐 第二步：調整位置與大小</h3>
-  <p style="font-size: 13px; color: #6c757d; margin-bottom: 15px;">提示：點擊頁面上的簽名即可選中進行調整</p>
-  <div class="btn-group">
-    <button class="secondary" onclick="changeSize(1.1)">➕ 放大簽名</button>
-    <button class="secondary" onclick="changeSize(0.9)">➖ 縮小簽名</button>
-    <button class="danger" onclick="deleteSelectedSignature()">🗑️ 刪除選中簽名</button>
+<div class="controls" id="edit-panel">
+  <div class="section-title">📐 第二步：調整位置與大小</div>
+  <div class="tool-row">
+    <span>縮放:</span>
+    <button class="tool-btn" onclick="adjustSize(1.2)">➕</button>
+    <button class="tool-btn" onclick="adjustSize(0.8)">➖</button>
+    <span class="hint">(滾輪/雙指亦可)</span>
   </div>
-  <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+  <div class="tool-row">
+    <span>旋轉:</span>
+    <button class="tool-btn" onclick="adjustRotate(-90)">↺ 90</button>
+    <button class="tool-btn" onclick="adjustRotate(90)">↻ 90</button>
+    <button class="tool-btn" onclick="adjustRotate(15)" style="font-size:14px;">+15°</button>
+    <button class="secondary" onclick="resetRotate()">重置</button>
+  </div>
+  <button class="danger" style="width: 100%;" onclick="removeSelected()">🗑️ 刪除選中簽名</button>
+</div>
+
+<div class="controls">
+  <div class="section-title">💾 第三步：匯出存檔 (WYSIWYG)</div>
   <div class="btn-group">
-    <button style="background-color: #28a745;" onclick="signAndDownload()">📥 匯出簽名 PDF</button>
-    <button style="background-color: #17a2b8;" onclick="signAndDownloadJPGAll()">🖼️ 匯出簽名頁 JPG</button>
+    <button class="success" style="flex: 1; padding: 15px;" onclick="exportAsPDF()">📥 下載 PDF (高畫質)</button>
+    <button style="background: #17a2b8; flex: 1; padding: 15px;" onclick="exportAsJPG()">🖼️ 下載 JPG</button>
   </div>
 </div>
 
 <script>
-// 設定 PDF.js Worker
+const { PDFDocument, degrees } = PDFLib;
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
 // LINE 偵測
-(function checkLineBrowser(){
-  if (navigator.userAgent.toLowerCase().indexOf("line") !== -1) {
-    const alertBox = document.getElementById('line-alert');
-    alertBox.innerHTML = "偵測到 LINE 內建瀏覽器！<br>請點擊右上角「...」選擇<b>「使用預設瀏覽器開啟」</b>以避免下載功能失效。";
-    alertBox.style.display = "block";
-  }
-})();
+if (navigator.userAgent.toLowerCase().indexOf("line") !== -1) {
+  const box = document.getElementById('line-alert'); box.style.display = "block";
+  box.innerHTML = "⚠️ 偵測到 LINE 瀏覽器！請選「使用預設瀏覽器開啟」以確保下載。";
+}
 
-const canvas = document.getElementById('signature-pad');
-const colorPicker = document.getElementById('color-picker');
-let signaturePad;
+const padCvs = document.getElementById('signature-pad');
+const colorPkr = document.getElementById('color-picker');
+let sigPad;
+let lastW = 0;
 
-function resizeCanvas() {
+function initPad() {
+  if (Math.abs(padCvs.offsetWidth - lastW) < 10) return;
+  lastW = padCvs.offsetWidth;
   const ratio = Math.max(window.devicePixelRatio || 1, 1);
-  canvas.width = canvas.offsetWidth * ratio;
-  canvas.height = canvas.offsetHeight * ratio;
-  canvas.getContext("2d").scale(ratio, ratio);
-  
-  const data = signaturePad ? signaturePad.toData() : null;
-  signaturePad = new SignaturePad(canvas, {
-    backgroundColor: 'rgba(0,0,0,0)',
-    minWidth: 1.5,
-    maxWidth: 3.5,
-    penColor: colorPicker.value
-  });
-  if (data) signaturePad.fromData(data);
+  const data = sigPad ? sigPad.toData() : null;
+  padCvs.width = padCvs.offsetWidth * ratio; padCvs.height = padCvs.offsetHeight * ratio;
+  padCvs.getContext("2d").scale(ratio, ratio);
+  sigPad = new SignaturePad(padCvs, { backgroundColor: 'rgba(0,0,0,0)', minWidth: 2, maxWidth: 4, penColor: colorPkr.value });
+  if (data) sigPad.fromData(data);
 }
+window.addEventListener("resize", initPad);
+initPad();
+colorPkr.oninput = () => { if (sigPad) sigPad.penColor = colorPkr.value; };
 
-window.addEventListener("resize", resizeCanvas);
-resizeCanvas();
+let pdfDocRef = null;
+let curP = 1;
+let sigs = []; 
+let activeS = null;
+let idGen = 0;
 
-colorPicker.addEventListener('input', () => {
-  if (signaturePad) signaturePad.penColor = colorPicker.value;
-});
+function loadImg(src) { return new Promise(r => { const i = new Image(); i.onload = () => r(i); i.src = src; }); }
 
-let pdfOriginalBytes = null;
-let currentPageNumber = 1;
-let signatureImages = []; // 存儲簽名對象 { id, page, imgElement, dataURL, scale }
-let selectedSignature = null;
-let idCounter = 0;
+// 上傳文件
+document.getElementById("pdf-upload").onchange = async (e) => {
+  const file = e.target.files[0]; if (!file) return;
+  const status = document.getElementById("load-status");
+  const container = document.getElementById("pdf-container");
+  status.textContent = "⏳ 載入中..."; container.innerHTML = '';
+  sigs = []; activeS = null;
 
-function loadImage(src) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
-}
-
-const pdfContainer = document.getElementById("pdf-container");
-const loadStatus = document.getElementById("load-status");
-
-// 檔案上傳處理
-document.getElementById("pdf-upload").addEventListener("change", async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  
-  loadStatus.textContent = "⏳ 正在載入文件...";
-  pdfContainer.innerHTML = '';
-  signatureImages = [];
-  selectedSignature = null;
-  
   try {
     if (file.type === "application/pdf") {
-      pdfOriginalBytes = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(pdfOriginalBytes) }).promise;
-      
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 1.5 });
-        const pageCanvas = document.createElement("canvas");
-        pageCanvas.width = viewport.width;
-        pageCanvas.height = viewport.height;
-        await page.render({ canvasContext: pageCanvas.getContext("2d"), viewport }).promise;
-
-        const wrapper = document.createElement("div");
-        wrapper.className = "pdf-page";
-        wrapper.dataset.pageNumber = i;
-        wrapper.style.width = viewport.width + "px";
-        wrapper.appendChild(pageCanvas);
-        
-        wrapper.onclick = (ev) => {
-          currentPageNumber = i;
-          loadStatus.textContent = `📍 目前選定：第 ${i} 頁`;
-          ev.stopPropagation();
-        };
-        
-        pdfContainer.appendChild(wrapper);
+      const data = await file.arrayBuffer();
+      pdfDocRef = await pdfjsLib.getDocument({ data: new Uint8Array(data) }).promise;
+      for (let i = 1; i <= pdfDocRef.numPages; i++) {
+        const page = await pdfDocRef.getPage(i);
+        const vp = page.getViewport({ scale: 1.5 });
+        const cvs = document.createElement("canvas");
+        cvs.width = vp.width; cvs.height = vp.height;
+        await page.render({ canvasContext: cvs.getContext("2d"), viewport: vp }).promise;
+        const wrap = document.createElement("div");
+        wrap.className = "pdf-page-wrapper"; wrap.dataset.page = i; wrap.style.width = vp.width + "px";
+        wrap.appendChild(cvs);
+        wrap.onclick = (ev) => { curP = i; status.textContent = `📍 已選第 ${i} 頁`; ev.stopPropagation(); };
+        container.appendChild(wrap);
       }
-      loadStatus.textContent = `✅ 載入成功：共 ${pdf.numPages} 頁`;
-    } else if (file.type.startsWith("image/")) {
-      const img = await loadImage(URL.createObjectURL(file));
-      const pageCanvas = document.createElement("canvas");
-      pageCanvas.width = img.width;
-      pageCanvas.height = img.height;
-      pageCanvas.getContext("2d").drawImage(img, 0, 0);
-
-      const wrapper = document.createElement("div");
-      wrapper.className = "pdf-page";
-      wrapper.dataset.pageNumber = 1;
-      wrapper.style.width = Math.min(img.width, 800) + "px";
-      wrapper.appendChild(pageCanvas);
-      
-      wrapper.onclick = () => { currentPageNumber = 1; };
-      pdfContainer.appendChild(wrapper);
-      
-      pdfOriginalBytes = null; // 標記為圖片模式
-      loadStatus.textContent = "✅ 圖片載入完成";
+      status.textContent = `✅ 共 ${pdfDocRef.numPages} 頁`;
+    } else {
+      const img = await loadImg(URL.createObjectURL(file));
+      const cvs = document.createElement("canvas");
+      cvs.width = img.width; cvs.height = img.height;
+      cvs.getContext("2d").drawImage(img, 0, 0);
+      const wrap = document.createElement("div");
+      wrap.className = "pdf-page-wrapper"; wrap.dataset.page = 1; wrap.style.width = Math.min(img.width, 800) + "px";
+      wrap.appendChild(cvs);
+      wrap.onclick = () => { curP = 1; };
+      container.appendChild(wrap);
+      pdfDocRef = null;
+      status.textContent = "✅ 圖片載入完成";
     }
-  } catch (err) {
-    alert("載入失敗：" + err.message);
-    loadStatus.textContent = "❌ 載入出錯";
-  }
-});
+  } catch (err) { alert(err.message); status.textContent = "❌ 出錯"; }
+};
 
-function clearSignature() { signaturePad.clear(); }
-
-function handleBodyClick(e) {
-  // 如果點擊的不是簽名圖片也不是控制按鈕，則取消選取
-  if (!e.target.closest('.signature-img') && !e.target.closest('#edit-controls')) {
-    deselectAll();
-  }
-}
-
-function deselectAll() {
+function deselectAll(e) {
+  if (e && (e.target.closest('.signature-img') || e.target.closest('.controls'))) return;
   document.querySelectorAll(".signature-img").forEach(el => el.classList.remove("selected"));
-  selectedSignature = null;
+  activeS = null;
 }
 
-function selectSignature(sigObj) {
-  deselectAll();
-  sigObj.imgElement.classList.add("selected");
-  selectedSignature = sigObj;
-}
+function addSignature() {
+  if (sigPad.isEmpty()) return;
+  const wrap = document.querySelector(`.pdf-page-wrapper[data-page="${curP}"]`);
+  if (!wrap) { alert("請先選擇文件頁面！"); return; }
 
-// 建立可拖拽簽名
-function createDraggableSignature() {
-  if (signaturePad.isEmpty()) { alert("請先在下方畫板簽名！"); return; }
-
-  const dataURL = signaturePad.toDataURL("image/png");
-  const wrapper = document.querySelector(`.pdf-page[data-page-number="${currentPageNumber}"]`);
-  
-  if (!wrapper) { alert("請先上傳並點選一個文件頁面！"); return; }
-
+  const data = sigPad.toDataURL("image/png");
   const img = document.createElement("img");
-  img.src = dataURL;
-  img.className = "signature-img";
-  img.style.left = "50px";
-  img.style.top = "50px";
-
-  const sigObj = { 
-    id: idCounter++, 
-    page: currentPageNumber, 
-    imgElement: img, 
-    dataURL: dataURL, 
-    scale: 1.0,
-    baseWidth: 150 // 初始 CSS 寬度
-  };
+  img.src = data; img.className = "signature-img";
+  img.style.left = "50px"; img.style.top = "50px";
   
-  signatureImages.push(sigObj);
-  wrapper.appendChild(img);
-  selectSignature(sigObj);
+  const obj = { id: idGen++, page: curP, el: img, data, scale: 1.0, rotate: 0, baseW: 150 };
+  sigs.push(obj);
+  wrap.appendChild(img);
+  sel(obj);
 
-  // 拖曳邏輯
-  let isDragging = false;
-  let startX, startY, initialLeft, initialTop;
+  // 互動邏輯 (拖曳/縮放)
+  let drag = false, pinch = false, sx, sy, il, it, id, is;
+  const getD = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
 
-  const onStart = (e) => {
-    isDragging = true;
-    selectSignature(sigObj);
-    const point = e.touches ? e.touches[0] : e;
-    startX = point.clientX;
-    startY = point.clientY;
-    initialLeft = parseInt(img.style.left);
-    initialTop = parseInt(img.style.top);
-    e.preventDefault();
-    e.stopPropagation();
+  const start = (e) => {
+    sel(obj);
+    if (e.touches && e.touches.length === 2) { pinch = true; drag = false; id = getD(e.touches); is = obj.scale; }
+    else { 
+      drag = true; pinch = false;
+      const p = e.touches ? e.touches[0] : e;
+      sx = p.clientX; sy = p.clientY; il = parseInt(img.style.left); it = parseInt(img.style.top); 
+    }
+    e.preventDefault(); e.stopPropagation();
   };
 
-  const onMove = (e) => {
-    if (!isDragging) return;
-    const point = e.touches ? e.touches[0] : e;
-    const dx = point.clientX - startX;
-    const dy = point.clientY - startY;
-    
-    const parentRect = wrapper.getBoundingClientRect();
-    const imgRect = img.getBoundingClientRect();
-    
-    let newLeft = initialLeft + dx;
-    let newTop = initialTop + dy;
-    
-    // 邊界限制
-    newLeft = Math.max(0, Math.min(newLeft, parentRect.width - imgRect.width));
-    newTop = Math.max(0, Math.min(newTop, parentRect.height - imgRect.height));
-    
-    img.style.left = newLeft + "px";
-    img.style.top = newTop + "px";
+  const move = (e) => {
+    if (pinch && e.touches.length === 2) {
+      obj.scale = Math.max(0.1, is * (getD(e.touches) / id));
+      upd(obj);
+    } else if (drag) {
+      const p = e.touches ? e.touches[0] : e;
+      img.style.left = (il + p.clientX - sx) + "px";
+      img.style.top = (it + p.clientY - sy) + "px";
+    }
   };
 
-  const onEnd = () => { isDragging = false; };
+  img.addEventListener("touchstart", start, { passive: false });
+  img.addEventListener("mousedown", start);
+  window.addEventListener("touchmove", move, { passive: false });
+  window.addEventListener("mousemove", move);
+  window.addEventListener("touchend", () => { drag = pinch = false; });
+  window.addEventListener("mouseup", () => drag = false);
+  img.addEventListener("wheel", (e) => { e.preventDefault(); obj.scale = Math.max(0.1, obj.scale * (e.deltaY > 0 ? 0.9 : 1.1)); upd(obj); }, { passive: false });
 
-  img.addEventListener("mousedown", onStart);
-  img.addEventListener("touchstart", onStart, { passive: false });
-  window.addEventListener("mousemove", onMove);
-  window.addEventListener("touchmove", onMove, { passive: false });
-  window.addEventListener("mouseup", onEnd);
-  window.addEventListener("touchend", onEnd);
+  function sel(s) { deselectAll(); s.el.classList.add("selected"); activeS = s; }
 }
 
-// 修正後的放大縮小邏輯
-function changeSize(factor) {
-  if (!selectedSignature) { alert("請先點選頁面上的簽名！"); return; }
-  
-  selectedSignature.scale *= factor;
-  // 直接調整 CSS 寬度以達到縮放效果，這樣 getBoundingClientRect 就會正確連動
-  selectedSignature.imgElement.style.width = (selectedSignature.baseWidth * selectedSignature.scale) + "px";
+function upd(s) {
+  s.el.style.width = (s.baseW * s.scale) + "px";
+  s.el.style.transform = `rotate(${s.rotate}deg)`;
 }
 
-function deleteSelectedSignature() {
-  if (!selectedSignature) { alert("請先點選頁面上的簽名！"); return; }
-  selectedSignature.imgElement.remove();
-  signatureImages = signatureImages.filter(s => s.id !== selectedSignature.id);
-  selectedSignature = null;
-}
+function adjustSize(f) { if (activeS) { activeS.scale *= f; upd(activeS); } }
+function adjustRotate(a) { if (activeS) { activeS.rotate = (activeS.rotate + a) % 360; upd(activeS); } }
+function resetRotate() { if (activeS) { activeS.rotate = 0; upd(activeS); } }
+function removeSelected() { if (activeS) { activeS.el.remove(); sigs = sigs.filter(s => s.id !== activeS.id); activeS = null; } }
+function clearPad() { sigPad.clear(); }
 
-// 下載 PDF
-async function signAndDownload() {
-  if (signatureImages.length === 0) { alert("尚未加入任何簽名！"); return; }
-  
-  loadStatus.textContent = "⚙️ 正在生成 PDF...";
+// 核心：另類思路 - 既然 Canvas 渲染最準，那就把 Canvas 合併成果轉成 PDF
+async function exportAsPDF() {
+  const status = document.getElementById("load-status");
+  status.textContent = "⏳ 正在合成 PDF...";
   try {
-    const pdfDoc = pdfOriginalBytes ? await PDFLib.PDFDocument.load(pdfOriginalBytes) : await PDFLib.PDFDocument.create();
-    const pages = pdfDoc.getPages();
-
-    for (const sig of signatureImages) {
-      const page = pdfOriginalBytes ? pages[sig.page - 1] : (pages[0] || pdfDoc.addPage([800, 600]));
-      const { width: pW, height: pH } = page.getSize();
+    const newPdf = await PDFDocument.create();
+    const wrappers = document.querySelectorAll(".pdf-page-wrapper");
+    
+    for (const wrap of wrappers) {
+      const pNum = wrap.dataset.page;
+      const baseCvs = wrap.querySelector("canvas");
       
-      const wrapper = document.querySelector(`.pdf-page[data-page-number="${sig.page}"]`);
-      const canvasBase = wrapper.querySelector("canvas");
+      // 建立一個高畫質的離屏畫布進行合成
+      const offCvs = document.createElement("canvas");
+      offCvs.width = baseCvs.width;
+      offCvs.height = baseCvs.height;
+      const ctx = offCvs.getContext("2d");
       
-      const cRect = canvasBase.getBoundingClientRect();
-      const iRect = sig.imgElement.getBoundingClientRect();
+      // 1. 繪製底圖
+      ctx.drawImage(baseCvs, 0, 0);
       
-      const pngImage = await pdfDoc.embedPng(sig.dataURL);
-      const ratio = pW / cRect.width;
-
-      const drawW = iRect.width * ratio;
-      const drawH = iRect.height * ratio;
-      const drawX = (iRect.left - cRect.left) * ratio;
-      const drawY = pH - ((iRect.top - cRect.top) * ratio) - drawH;
-
-      page.drawImage(pngImage, { x: drawX, y: drawY, width: drawW, height: drawH });
+      // 2. 繪製該頁的所有簽名 (精確對齊螢幕上的視覺效果)
+      const pageSigs = sigs.filter(s => s.page == pNum);
+      for (const s of pageSigs) {
+        const iR = s.el.getBoundingClientRect();
+        const cR = baseCvs.getBoundingClientRect();
+        
+        // 計算渲染比例
+        const sx = baseCvs.width / cR.width;
+        const sy = baseCvs.height / cR.height;
+        
+        const img = await loadImg(s.data);
+        
+        ctx.save();
+        // 移到簽名中心
+        ctx.translate((iR.left - cR.left + iR.width/2) * sx, (iR.top - cR.top + iR.height/2) * sy);
+        ctx.rotate(s.rotate * Math.PI / 180);
+        // 繪製
+        ctx.drawImage(img, -iR.width/2 * sx, -iR.height/2 * sy, iR.width * sx, iR.height * sy);
+        ctx.restore();
+      }
+      
+      // 3. 將合成後的畫布轉為高品質圖片並加入 PDF
+      const imgData = offCvs.toDataURL("image/jpeg", 0.95);
+      const pdfImg = await newPdf.embedJpg(imgData);
+      const page = newPdf.addPage([baseCvs.width, baseCvs.height]);
+      page.drawImage(pdfImg, { x: 0, y: 0, width: baseCvs.width, height: baseCvs.height });
     }
 
-    const bytes = await pdfDoc.save();
+    const bytes = await newPdf.save();
     const link = document.createElement("a");
     link.href = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
-    link.download = "Signed_Document_Jobs.pdf";
+    link.download = "Signed_Perfect.pdf";
     link.click();
-    loadStatus.textContent = "✨ PDF 下載成功！";
-  } catch (err) {
-    alert("PDF 生成失敗：" + err.message);
+    status.textContent = "✨ PDF 下載成功";
+  } catch (e) {
+    console.error(e);
+    alert("PDF 產出失敗：" + e.message);
   }
 }
 
-// 下載 JPG
-async function signAndDownloadJPGAll() {
-  if (signatureImages.length === 0) { alert("尚未加入任何簽名！"); return; }
-  
-  loadStatus.textContent = "⚙️ 正在生成圖片...";
-  const signedPages = [...new Set(signatureImages.map(s => s.page))];
-  
-  for (const pageNum of signedPages) {
-    const wrapper = document.querySelector(`.pdf-page[data-page-number="${pageNum}"]`);
-    const baseCanvas = wrapper.querySelector("canvas");
-    const outCanvas = document.createElement('canvas');
-    outCanvas.width = baseCanvas.width;
-    outCanvas.height = baseCanvas.height;
-    const ctx = outCanvas.getContext('2d');
-    ctx.drawImage(baseCanvas, 0, 0);
-
-    const sigs = signatureImages.filter(s => s.page === pageNum);
-    for (const sig of sigs) {
-      const iRect = sig.imgElement.getBoundingClientRect();
-      const cRect = baseCanvas.getBoundingClientRect();
-      const scaleX = baseCanvas.width / cRect.width;
-      const scaleY = baseCanvas.height / cRect.height;
-      
-      const img = await loadImage(sig.dataURL);
-      ctx.drawImage(img, 
-        (iRect.left - cRect.left) * scaleX, 
-        (iRect.top - cRect.top) * scaleY, 
-        iRect.width * scaleX, 
-        iRect.height * scaleY
-      );
+async function exportAsJPG() {
+  const status = document.getElementById("load-status");
+  status.textContent = "⏳ 正在合成圖片...";
+  const signedPages = [...new Set(sigs.map(s => s.page))];
+  for (const n of signedPages) {
+    const wrap = document.querySelector(`.pdf-page-wrapper[data-page="${n}"]`);
+    const base = wrap.querySelector("canvas");
+    const off = document.createElement("canvas");
+    off.width = base.width; off.height = base.height;
+    const ctx = off.getContext("2d");
+    ctx.drawImage(base, 0, 0);
+    
+    for (const s of sigs.filter(sig => sig.page == n)) {
+      const iR = s.el.getBoundingClientRect(), cR = base.getBoundingClientRect();
+      const sx = base.width / cR.width, sy = base.height / cR.height;
+      const img = await loadImg(s.data);
+      ctx.save();
+      ctx.translate((iR.left - cR.left + iR.width/2) * sx, (iR.top - cR.top + iR.height/2) * sy);
+      ctx.rotate(s.rotate * Math.PI / 180);
+      ctx.drawImage(img, -iR.width/2 * sx, -iR.height/2 * sy, iR.width * sx, iR.height * sy);
+      ctx.restore();
     }
-
-    const blob = await new Promise(r => outCanvas.toBlob(r, "image/jpeg", 0.9));
+    const blob = await new Promise(r => off.toBlob(r, "image/jpeg", 0.95));
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `Signed_Page_${pageNum}.jpg`;
+    link.download = `Signed_Page_${n}.jpg`;
     link.click();
   }
-  loadStatus.textContent = "✨ 圖片下載成功！";
+  status.textContent = "✨ 圖片下載成功";
 }
 </script>
 </body>
