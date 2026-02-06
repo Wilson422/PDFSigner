@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none" />
-  <title>PDF 簽名系統 - 賈伯斯穩定版 🦞</title>
+  <title>PDF 簽名系統 - 賈伯斯終極修復版 🦞</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.6/dist/signature_pad.umd.min.js"></script>
   <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -45,7 +45,6 @@
     .signature-img.selected {
       border: 2px dashed var(--primary-color);
       background: rgba(0, 123, 255, 0.1);
-      box-shadow: 0 0 15px rgba(0, 123, 255, 0.3);
     }
     
     .controls { margin-bottom: 15px; padding: 15px; background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid #eee; }
@@ -75,7 +74,7 @@
 <body onclick="handleBodyClick(event)">
 
 <div class="header">
-  <h2>PDF 簽名系統 <small style="font-size: 0.6em; opacity: 0.7;">修正偏移版 🦞</small></h2>
+  <h2>PDF 簽名系統 <small style="font-size: 0.6em; opacity: 0.7;">終極修復版 🦞</small></h2>
   <div class="status-bar" id="load-status">等待上傳</div>
 </div>
 
@@ -129,7 +128,6 @@
 </div>
 
 <script>
-const { PDFDocument, degrees } = PDFLib;
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
 // LINE 偵測
@@ -336,12 +334,12 @@ function deleteSelectedSignature() {
 
 function clearSignature() { signaturePad.clear(); }
 
-// 核心修正：不使用 anchor，手動計算左下角座標
+// 核心修正：避免使用 PDFLib 內部列舉，直接傳入字串與手動計算中心點
 async function signAndDownload() {
-  if (signatureImages.length === 0) { alert("請先加入簽名！"); return; }
+  if (signatureImages.length === 0) { alert("尚未加入簽名！"); return; }
   loadStatus.textContent = "⏳ 產出 PDF...";
   try {
-    const doc = pdfOriginalBytes ? await PDFDocument.load(pdfOriginalBytes) : await PDFDocument.create();
+    const doc = pdfOriginalBytes ? await PDFLib.PDFDocument.load(pdfOriginalBytes) : await PDFLib.PDFDocument.create();
     const pages = doc.getPages();
 
     for (const sig of signatureImages) {
@@ -350,39 +348,39 @@ async function signAndDownload() {
       let page = pdfOriginalBytes ? pages[sig.page - 1] : (pages[0] || doc.addPage([canvasBase.width, canvasBase.height]));
       const { width: pW, height: pH } = page.getSize();
       
-      // 計算相對於 Canvas 的座標
       const cR = canvasBase.getBoundingClientRect();
       const iR = sig.imgElement.getBoundingClientRect();
       
+      // 計算相對於頁面的比例
       const ratio = pW / cR.width;
       
-      // 獲取簽名在 PDF 上的實際寬高
+      // 獲取簽名在 PDF 上的實際寬高 (getBoundingClientRect 已經包含縮放後的大小)
       const drawW = iR.width * ratio;
       const drawH = iR.height * ratio;
       
-      // 計算中心點在 PDF 上的座標 (PDF Y軸是向上)
+      // 計算中心點位置
       const centerX = (iR.left - cR.left + iR.width / 2) * ratio;
       const centerY = pH - ((iR.top - cR.top + iR.height / 2) * ratio);
 
       const png = await doc.embedPng(sig.dataURL);
       
-      // 使用中心點偏移與旋轉
+      // 這裡不使用 PDFLib.HorizontalAlignment.Center，改用手動偏移或確認屬性
       page.drawImage(png, { 
         x: centerX,
         y: centerY, 
         width: drawW, 
         height: drawH,
-        rotate: degrees(-sig.rotation),
-        // 這是最穩定的設定，確保 x,y 是中心點
-        xAnchor: PDFLib.HorizontalAlignment.Center,
-        yAnchor: PDFLib.VerticalAlignment.Middle
+        rotate: PDFLib.degrees(-sig.rotation),
+        // 直接使用字串作為 Anchor
+        xAnchor: 'center',
+        yAnchor: 'middle'
       });
     }
 
     const b = await doc.save();
     const l = document.createElement("a");
     l.href = URL.createObjectURL(new Blob([b], { type: "application/pdf" }));
-    l.download = "signed_fixed.pdf"; l.click();
+    l.download = "signed_final.pdf"; l.click();
     loadStatus.textContent = "✨ 已下載";
   } catch (e) { 
     console.error(e);
@@ -393,7 +391,7 @@ async function signAndDownload() {
 
 async function signAndDownloadJPGAll() {
   if (signatureImages.length === 0) return;
-  loadStatus.textContent = "⏳ 產出圖片...";
+  loadStatus.textContent = "⏳ 產出中...";
   const pages = [...new Set(signatureImages.map(s => s.page))];
   for (const n of pages) {
     const wrap = document.querySelector(`.pdf-page[data-page-number="${n}"]`);
