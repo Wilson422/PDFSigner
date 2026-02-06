@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none" />
-  <title>PDF 簽名系統 - 賈伯斯終極版 🦞</title>
+  <title>PDF 簽名系統 - 賈伯斯穩定版 🦞</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.6/dist/signature_pad.umd.min.js"></script>
   <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
@@ -42,7 +42,6 @@
     .signature-img.selected {
       border: 2px dashed var(--primary-color);
       background: rgba(0, 123, 255, 0.1);
-      box-shadow: 0 0 15px rgba(0, 123, 255, 0.3);
     }
     
     .controls { margin-bottom: 15px; padding: 15px; background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid #eee; }
@@ -60,7 +59,7 @@
     button.danger { background-color: var(--danger-color); }
     button.success { background-color: var(--success-color); }
     
-    .tool-btn { padding: 8px; background: #f8f9fa; color: #333; border: 1px solid #ddd; font-size: 18px; line-height: 1; }
+    .tool-btn { padding: 8px; background: #f8f9fa; color: #333; border: 1px solid #ddd; font-size: 18px; line-height: 1; border-radius: 6px; }
     .tool-btn:hover { background: #e9ecef; }
     
     #line-alert { display: none; background: #fff3cd; border: 1px solid #ffeeba; color: #856404; padding: 12px; margin-bottom: 15px; border-radius: 8px; font-size: 13px; text-align: center; }
@@ -72,7 +71,7 @@
 <body onclick="handleBodyClick(event)">
 
 <div class="header">
-  <h2>PDF 簽名系統 <small style="font-size: 0.6em; opacity: 0.7;">終極優化版 🦞</small></h2>
+  <h2>PDF 簽名系統 <small style="font-size: 0.6em; opacity: 0.7;">修正穩定版 🦞</small></h2>
   <div class="status-bar" id="load-status">等待上傳</div>
 </div>
 
@@ -103,14 +102,14 @@
   <div style="display: flex; flex-direction: column; gap: 12px;">
     <div style="display: flex; align-items: center; gap: 10px;">
       <span style="font-size: 13px; min-width: 40px;">縮放:</span>
-      <button class="tool-btn" onclick="changeSize(1.1)" title="放大">➕</button>
-      <button class="tool-btn" onclick="changeSize(0.9)" title="縮小">➖</button>
-      <span class="mobile-tip">(手機支援雙指縮放)</span>
+      <button class="tool-btn" onclick="changeSize(1.1)">➕</button>
+      <button class="tool-btn" onclick="changeSize(0.9)">➖</button>
+      <span class="mobile-tip">(手機支援雙指縮放 / 電腦支援滾輪)</span>
     </div>
     <div style="display: flex; align-items: center; gap: 10px;">
       <span style="font-size: 13px; min-width: 40px;">旋轉:</span>
-      <button class="tool-btn" onclick="rotateSignature(-15)" title="逆時針">↺</button>
-      <button class="tool-btn" onclick="rotateSignature(15)" title="順時針">↻</button>
+      <button class="tool-btn" onclick="rotateSignature(-15)">↺</button>
+      <button class="tool-btn" onclick="rotateSignature(15)">↻</button>
       <button class="tool-btn" onclick="resetRotation()" style="font-size: 12px;">重置</button>
     </div>
     <div class="btn-group">
@@ -128,6 +127,9 @@
 </div>
 
 <script>
+// 使用較舊但穩定的 CDN 引入方式，確保 PDFLib 的相容性
+const { PDFDocument, degrees } = PDFLib;
+
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
 // LINE 偵測
@@ -216,7 +218,7 @@ document.getElementById("pdf-upload").addEventListener("change", async (e) => {
       const wrapper = document.createElement("div");
       wrapper.className = "pdf-page";
       wrapper.dataset.pageNumber = 1;
-      wrapper.style.width = "100%";
+      wrapper.style.width = Math.min(img.width, 800) + "px";
       wrapper.appendChild(pc);
       wrapper.onclick = () => { currentPageNumber = 1; };
       pdfContainer.appendChild(wrapper);
@@ -261,7 +263,7 @@ function createDraggableSignature() {
   wrapper.appendChild(img);
   select(sigObj);
 
-  // 交互邏輯 (拖曳與縮放)
+  // 交互邏輯
   let isDragging = false, isPinching = false;
   let startX, startY, initL, initT, initDist, initScale;
 
@@ -304,7 +306,6 @@ function createDraggableSignature() {
   window.addEventListener("mouseup", onEnd);
   window.addEventListener("touchend", onEnd);
   
-  // 滑鼠滾輪縮放支援
   img.addEventListener("wheel", (e) => {
     e.preventDefault();
     const factor = e.deltaY > 0 ? 0.9 : 1.1;
@@ -345,49 +346,60 @@ function deleteSelectedSignature() {
 
 function clearSignature() { signaturePad.clear(); }
 
-// 核心：修正 PDF 座標與旋轉
+// 核心：修正 PDF 生成邏輯
 async function signAndDownload() {
   if (signatureImages.length === 0) { alert("尚未加入簽名！"); return; }
   loadStatus.textContent = "⏳ 產生中...";
   try {
-    const doc = pdfOriginalBytes ? await PDFLib.PDFDocument.load(pdfOriginalBytes) : await PDFLib.PDFDocument.create();
+    const doc = pdfOriginalBytes ? await PDFDocument.load(pdfOriginalBytes) : await PDFDocument.create();
     const pages = doc.getPages();
 
     for (const sig of signatureImages) {
       const wrap = document.querySelector(`.pdf-page[data-page-number="${sig.page}"]`);
       const canvasBase = wrap.querySelector("canvas");
-      const page = pdfOriginalBytes ? pages[sig.page - 1] : (pages[0] || doc.addPage([canvasBase.width, canvasBase.height]));
-      const { width: pW, height: pH } = page.getSize();
       
+      // 確保頁面存在
+      let page;
+      if (pdfOriginalBytes) {
+        page = pages[sig.page - 1];
+      } else {
+        page = pages[0] || doc.addPage([canvasBase.width, canvasBase.height]);
+      }
+      
+      const { width: pW, height: pH } = page.getSize();
       const cR = canvasBase.getBoundingClientRect();
       const iR = sig.imgElement.getBoundingClientRect();
       const png = await doc.embedPng(sig.dataURL);
       const ratio = pW / cR.width;
 
-      // 重要：pdf-lib 旋轉是逆時針，web 是順時針，所以要加負號
-      // 同時座標 y 是從底部算起
       const drawW = iR.width * ratio;
       const drawH = iR.height * ratio;
       const drawX = (iR.left - cR.left) * ratio;
       const drawY = pH - ((iR.top - cR.top) * ratio) - drawH;
 
+      // 使用最基本的參數組合，避免部分瀏覽器不支援新 API
       page.drawImage(png, { 
-        x: drawX + drawW/2, // 配合中心點旋轉
+        x: drawX + drawW/2,
         y: drawY + drawH/2, 
         width: drawW, 
         height: drawH,
-        rotate: PDFLib.degrees(-sig.rotation), // 修正旋轉方向
-        xAnchor: PDFLib.HorizontalAlignment.Center,
-        yAnchor: PDFLib.VerticalAlignment.Middle
+        rotate: degrees(-sig.rotation),
+        // 手動處理中心點對齊
+        xAnchor: 'center', 
+        yAnchor: 'middle'
       });
     }
 
     const b = await doc.save();
     const l = document.createElement("a");
     l.href = URL.createObjectURL(new Blob([b], { type: "application/pdf" }));
-    l.download = "signed_final.pdf"; l.click();
-    loadStatus.textContent = "✨ PDF 已下載";
-  } catch (e) { console.error(e); alert("PDF 生成失敗"); }
+    l.download = "signed_fixed.pdf"; l.click();
+    loadStatus.textContent = "✨ 已下載";
+  } catch (e) { 
+    console.error(e); 
+    alert("PDF 生成失敗，可能是因為：" + e.message); 
+    loadStatus.textContent = "❌ 失敗";
+  }
 }
 
 async function signAndDownloadJPGAll() {
@@ -418,7 +430,7 @@ async function signAndDownloadJPGAll() {
     l.href = URL.createObjectURL(b);
     l.download = `page_${n}.jpg`; l.click();
   }
-  loadStatus.textContent = "✨ 圖片已下載";
+  loadStatus.textContent = "✨ 已下載";
 }
 </script>
 </body>
