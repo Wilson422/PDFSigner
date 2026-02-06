@@ -3,113 +3,97 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none" />
-  <title>PDF 簽名系統 - 賈伯斯終極修復版 🦞</title>
+  <title>PDF 簽名系統 - 賈伯斯完美版 🦞</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.6/dist/signature_pad.umd.min.js"></script>
   <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
   <style>
-    :root { --primary: #007bff; --bg: #f4f7f9; --panel: white; }
-    body { font-family: -apple-system, sans-serif; padding: 10px; background-color: var(--bg); margin: 0; color: #333; }
-    .header { background: var(--panel); padding: 10px 15px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; border-radius: 0 0 10px 10px; }
-    h2 { margin: 0; color: var(--primary); font-size: 1.1em; }
+    body { font-family: -apple-system, sans-serif; padding: 10px; background-color: #f0f2f5; margin: 0; }
+    .header { background: white; padding: 10px 15px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; }
+    h2 { margin: 0; color: #007bff; font-size: 1.1em; }
     
     #pdf-container { 
-      max-height: 60vh; overflow: auto; background: #adb5bd; padding: 20px; margin: 10px 0;
-      border-radius: 12px; display: flex; flex-direction: column; align-items: center;
-      box-shadow: inset 0 2px 8px rgba(0,0,0,0.1);
+      max-height: 60vh; overflow: auto; background: #99a; padding: 15px; margin: 10px 0;
+      text-align: center; border-radius: 8px; box-shadow: inset 0 2px 8px rgba(0,0,0,0.2);
     }
     
-    .pdf-page { position: relative; margin-bottom: 20px; box-shadow: 0 8px 20px rgba(0,0,0,0.2); background: white; }
+    .pdf-page { position: relative; display: inline-block; margin-bottom: 20px; box-shadow: 0 5px 20px rgba(0,0,0,0.3); background: white; }
     canvas { display: block; max-width: 100%; height: auto; }
     
     .signature-img {
-      position: absolute; width: 150px; height: auto; touch-action: none; cursor: move; z-index: 100;
+      position: absolute; width: 150px; height: auto; touch-action: none; cursor: move; z-index: 1000;
       transform-origin: center center; border: 2px solid transparent; user-select: none;
     }
-    .signature-img.selected { border: 2px dashed var(--primary); background: rgba(0,123,255,0.1); }
+    .signature-img.selected { border: 2px dashed #007bff; background: rgba(0,123,255,0.1); }
     
-    .controls { background: var(--panel); padding: 15px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #eee; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-    .section-title { font-weight: bold; margin-bottom: 10px; color: #555; font-size: 0.9em; }
+    .controls { background: white; padding: 15px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #eee; }
+    #signature-pad { width: 100%; height: 180px; border: 1px solid #ccc; border-radius: 8px; background: #fff; }
     
-    #signature-pad { width: 100%; height: 160px; border: 2px solid #ccc; border-radius: 8px; background: #fff; }
-    
-    .btn-group { display: flex; flex-wrap: wrap; gap: 8px; }
-    button { padding: 10px 14px; border: none; border-radius: 8px; color: white; background: var(--primary); font-weight: bold; cursor: pointer; transition: 0.2s; }
-    button:active { transform: scale(0.95); }
+    button { padding: 10px 14px; border: none; border-radius: 8px; color: white; background: #007bff; font-weight: bold; cursor: pointer; }
     button.secondary { background: #6c757d; }
     button.danger { background: #dc3545; }
     button.success { background: #28a745; }
     
-    .tool-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-    .tool-btn { min-width: 44px; height: 44px; background: #f8f9fa; border: 1px solid #ddd; border-radius: 8px; font-size: 18px; color: #333; display: flex; align-items: center; justify-content: center; }
+    .tool-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+    .tool-btn { min-width: 44px; height: 44px; background: #f8f9fa; border: 1px solid #ddd; border-radius: 6px; font-size: 18px; color: #333; }
     
-    #line-alert { display: none; background: #fff3cd; padding: 12px; border-radius: 8px; margin-bottom: 10px; font-size: 13px; color: #856404; border: 1px solid #ffeeba; }
-    .status { font-size: 12px; color: #666; }
-    .hint { font-size: 11px; color: #999; margin-top: 4px; font-style: italic; }
+    #line-alert { display: none; background: #fff3cd; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 13px; border: 1px solid #ffeeba; color: #856404; text-align: center; }
   </style>
 </head>
 <body onclick="deselectAll(event)">
 
+<div id="line-alert"></div>
 <div class="header">
-  <h2>PDF 簽名系統 <small>終極版 🦞</small></h2>
-  <div id="load-status" class="status">等待檔案</div>
+  <h2>PDF 簽名系統 <small>兩全其美版 🦞</small></h2>
+  <div id="load-status" style="font-size: 12px; color: #666;">等待檔案</div>
 </div>
 
-<div id="line-alert"></div>
-
 <div class="controls">
-  <div class="section-title">📁 上傳檔案</div>
-  <input type="file" id="pdf-upload" accept="application/pdf,image/*" />
+  <input type="file" id="pdf-upload" accept="application/pdf,image/*" style="width: 100%;" />
 </div>
 
 <div id="pdf-container"></div>
 
 <div class="controls">
-  <div class="section-title">🖊️ 第一步：手寫簽名</div>
-  <div class="tool-row" style="justify-content: space-between;">
-    <div style="display:flex; align-items:center; gap:8px;">
-      <input type="color" id="color-picker" value="#000000" style="width:40px; height:34px; border:none; padding:0;" />
-    </div>
-    <button class="secondary" onclick="clearPad()">🧹 清除畫板</button>
+  <div class="tool-row">
+    <label>簽名顏色:</label>
+    <input type="color" id="color-picker" value="#000000" />
+    <button class="secondary" onclick="clearPad()">清除</button>
   </div>
   <canvas id="signature-pad"></canvas>
   <button style="width: 100%; margin-top: 10px;" onclick="addSignature()">✨ 產生簽名圖片</button>
 </div>
 
 <div class="controls" id="edit-panel">
-  <div class="section-title">📐 第二步：調整選中簽名</div>
   <div class="tool-row">
-    <span style="min-width: 40px;">縮放:</span>
+    <span>縮放:</span>
     <button class="tool-btn" onclick="adjustSize(1.2)">➕</button>
     <button class="tool-btn" onclick="adjustSize(0.8)">➖</button>
-    <span class="hint">(支援滾輪/雙指)</span>
+    <span style="font-size: 11px; color: #999;">(支援雙指/滾輪)</span>
   </div>
   <div class="tool-row">
-    <span style="min-width: 40px;">旋轉:</span>
-    <button class="tool-btn" onclick="adjustRotate(-90)">↺ 90</button>
-    <button class="tool-btn" onclick="adjustRotate(90)">↻ 90</button>
-    <button class="tool-btn" onclick="adjustRotate(5)" style="font-size: 14px;">+5°</button>
+    <span>旋轉:</span>
+    <button class="tool-btn" onclick="adjustRotate(-90)">↺90</button>
+    <button class="tool-btn" onclick="adjustRotate(90)">↻90</button>
+    <button class="tool-btn" style="font-size: 14px;" onclick="adjustRotate(5)">+5°</button>
     <button class="secondary" style="padding: 5px 10px;" onclick="resetRotate()">重置</button>
   </div>
   <button class="danger" style="width: 100%;" onclick="removeSelected()">🗑️ 刪除選中簽名</button>
 </div>
 
 <div class="controls">
-  <div class="section-title">💾 第三步：匯出存檔</div>
-  <div class="btn-group">
+  <div style="display: flex; gap: 10px;">
     <button class="success" style="flex: 1; padding: 15px;" onclick="exportPDF()">📥 下載 PDF</button>
     <button style="background: #17a2b8; flex: 1; padding: 15px;" onclick="exportJPG()">🖼️ 下載 JPG</button>
   </div>
 </div>
 
 <script>
-const { PDFDocument, degrees, radians } = PDFLib;
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
 if (navigator.userAgent.toLowerCase().indexOf("line") !== -1) {
-  const box = document.getElementById('line-alert');
-  box.style.display = "block";
-  box.innerHTML = "⚠️ 偵測到 LINE 瀏覽器！請選「使用預設瀏覽器開啟」以確保下載功能。";
+  document.getElementById('line-alert').style.display = "block";
+  document.getElementById('line-alert').innerHTML = "⚠️ 偵測到 LINE 瀏覽器，請點選右上角 [三個點] 選擇「使用預設瀏覽器開啟」。";
 }
 
 const padCvs = document.getElementById('signature-pad');
@@ -167,7 +151,7 @@ document.getElementById("pdf-upload").onchange = async (e) => {
       cvs.width = img.width; cvs.height = img.height;
       cvs.getContext("2d").drawImage(img, 0, 0);
       const wrap = document.createElement("div");
-      wrap.className = "pdf-page"; wrap.dataset.page = 1; wrap.style.width = "100%";
+      wrap.className = "pdf-page"; wrap.dataset.page = 1; wrap.style.width = Math.min(img.width, 800) + "px";
       wrap.appendChild(cvs);
       wrap.onclick = () => { curP = 1; };
       container.appendChild(wrap);
@@ -186,7 +170,7 @@ function deselectAll(e) {
 function addSignature() {
   if (sigPad.isEmpty()) { alert("請先簽名！"); return; }
   const wrap = document.querySelector(`.pdf-page[data-page="${curP}"]`);
-  if (!wrap) { alert("請點選文件頁面！"); return; }
+  if (!wrap) { alert("請先選擇文件頁面！"); return; }
 
   const data = sigPad.toDataURL("image/png");
   const img = document.createElement("img");
@@ -203,9 +187,9 @@ function addSignature() {
 
   const start = (e) => {
     sel(obj);
-    if (e.touches && e.touches.length === 2) { pinch = true; id = dist(e.touches); is = obj.scale; }
+    if (e.touches && e.touches.length === 2) { pinch = true; drag = false; id = dist(e.touches); is = obj.scale; }
     else { 
-      drag = true; 
+      drag = true; pinch = false;
       const p = e.touches ? e.touches[0] : e;
       sx = p.clientX; sy = p.clientY; il = parseInt(img.style.left); it = parseInt(img.style.top); 
     }
@@ -231,12 +215,7 @@ function addSignature() {
   window.addEventListener("mousemove", move);
   window.addEventListener("touchend", end);
   window.addEventListener("mouseup", end);
-  
-  img.addEventListener("wheel", (e) => {
-    e.preventDefault();
-    obj.scale = Math.max(0.1, obj.scale * (e.deltaY > 0 ? 0.9 : 1.1));
-    upd(obj);
-  }, { passive: false });
+  img.addEventListener("wheel", (e) => { e.preventDefault(); obj.scale = Math.max(0.1, obj.scale * (e.deltaY > 0 ? 0.9 : 1.1)); upd(obj); }, { passive: false });
 
   function sel(s) { deselectAll(); s.el.classList.add("selected"); activeS = s; }
 }
@@ -257,16 +236,15 @@ async function exportPDF() {
   const status = document.getElementById("load-status");
   status.textContent = "⏳ 產生中...";
   try {
-    const doc = pdfData ? await PDFDocument.load(pdfData) : await PDFDocument.create();
+    const doc = pdfData ? await PDFLib.PDFDocument.load(pdfData) : await PDFLib.PDFDocument.create();
     const pages = doc.getPages();
 
     for (const s of sigList) {
       const wrap = document.querySelector(`.pdf-page[data-page="${s.page}"]`);
       const canvas = wrap.querySelector("canvas");
       const page = pdfData ? pages[s.page - 1] : (pages[0] || doc.addPage([canvas.width, canvas.height]));
-      
       const { width: pW, height: pH } = page.getSize();
-      const pRotation = page.getRotation().angle; // 獲取頁面旋轉角度
+      const pR = page.getRotation().angle;
       
       const cR = canvas.getBoundingClientRect();
       const iR = s.el.getBoundingClientRect();
@@ -276,30 +254,26 @@ async function exportPDF() {
       const dh = iR.height * ratio;
       const png = await doc.embedPng(s.data);
       
-      // 計算相對於 Canvas 左上角的中心點
-      let cx = (iR.left - cR.left + iR.width / 2) * ratio;
-      let cy = (iR.top - cR.top + iR.height / 2) * ratio;
+      // 計算相對於 Canvas 的中心點
+      const cx = (iR.left - cR.left + iR.width / 2) * ratio;
+      const cy = (iR.top - cR.top + iR.height / 2) * ratio;
 
-      // 根據頁面旋轉中繼資料，對座標進行旋轉校正
+      // 核心：考慮頁面旋轉的座標轉換
       let finalX, finalY, finalRotate;
-      if (pRotation === 90) {
+      if (pR === 90) {
         finalX = cy; finalY = cx; finalRotate = s.rotate - 90;
-      } else if (pRotation === 180) {
+      } else if (pR === 180) {
         finalX = pW - cx; finalY = cy; finalRotate = s.rotate - 180;
-      } else if (pRotation === 270) {
+      } else if (pR === 270) {
         finalX = pW - cy; finalY = pH - cx; finalRotate = s.rotate - 270;
       } else {
         finalX = cx; finalY = pH - cy; finalRotate = s.rotate;
       }
 
       page.drawImage(png, {
-        x: finalX,
-        y: finalY,
-        width: dw,
-        height: dh,
-        rotate: degrees(-finalRotate),
-        xAnchor: 'center',
-        yAnchor: 'middle'
+        x: finalX, y: finalY, width: dw, height: dh,
+        rotate: PDFLib.degrees(-finalRotate),
+        xAnchor: 'center', yAnchor: 'middle'
       });
     }
 
@@ -307,8 +281,8 @@ async function exportPDF() {
     const l = document.createElement("a");
     l.href = URL.createObjectURL(new Blob([b], { type: "application/pdf" }));
     l.download = "signed_by_jobs.pdf"; l.click();
-    status.textContent = "✨ 已完成";
-  } catch (e) { console.error(e); alert("PDF 失敗：" + e.message); }
+    status.textContent = "✨ 完成";
+  } catch (e) { alert("失敗：" + e.message); }
 }
 
 async function exportJPG() {
